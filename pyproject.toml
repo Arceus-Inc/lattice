@@ -1,0 +1,86 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lattice"
+version = "0.1.0"
+description = "The consolidation SDK — episodic curation, distilled lessons, and employee growth over chorus."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+authors = [{ name = "Arceus-Inc" }]
+keywords = ["memory", "consolidation", "sdk", "chorus", "dream", "agents"]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Typing :: Typed",
+]
+dependencies = [
+  # lattice binds ONLY to dream.contracts (the cross-repo Protocol seam). It never imports chorus —
+  # a consumer's composition root wires chorus's concrete classes into lattice's ports (spec: no
+  # sideways import).
+  "dream",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2",
+  "pytest-asyncio>=0.23",
+  "ruff>=0.6",
+  "mypy>=1.11",
+  # chorus is NOT a runtime dependency of the lattice SDK. It is pulled in for the composition-root
+  # example (examples/chorus_bridge.py) and the L1 seam test only.
+  "chorus",
+]
+
+[project.scripts]
+lattice = "lattice_cli.__main__:main"
+
+[project.urls]
+Homepage   = "https://github.com/Arceus-Inc/lattice"
+Repository = "https://github.com/Arceus-Inc/lattice"
+
+# Sibling repos during local development:
+#   uv pip install -e ../dream -e ../chorus -e .[dev]
+[tool.uv.sources]
+dream = { path = "../dream", editable = true }
+chorus = { path = "../chorus", editable = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lattice", "src/lattice_cli"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/lattice", "src/lattice_cli", "tests", "docs", "examples", "README.md", "pyproject.toml"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests", "examples"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B", "SIM"]
+"examples/**" = ["B"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+packages = ["lattice", "lattice_cli"]
+mypy_path = "src"
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*", "examples.*"]
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
