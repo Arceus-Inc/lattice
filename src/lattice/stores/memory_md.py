@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from lattice.contracts.atom import Atom
+from lattice.stores._safe_path import assert_safe_store_id
 
 
 class MemoryMdStore:
@@ -19,23 +20,27 @@ class MemoryMdStore:
         self._root.mkdir(parents=True, exist_ok=True)
 
     def list_active(self, employee_id: str) -> tuple[Atom, ...]:
+        assert_safe_store_id(employee_id)
         atoms = self._read_all(employee_id)
         active = [atom for atom in atoms if atom.invalid_at is None]
         return tuple(sorted(active, key=lambda atom: atom.created_at, reverse=True))
 
     def get_active(self, employee_id: str, key: str) -> Atom | None:
+        assert_safe_store_id(employee_id)
         for atom in self.list_active(employee_id):
             if atom.key == key:
                 return atom
         return None
 
     def write(self, atom: Atom) -> None:
+        assert_safe_store_id(atom.employee_id)
         path = self._atom_path(atom.employee_id, atom.key)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(_atom_to_json(atom), indent=2), encoding="utf-8")
         self._rewrite_memory_md(atom.employee_id)
 
     def invalidate(self, employee_id: str, key: str, *, at: datetime) -> None:
+        assert_safe_store_id(employee_id)
         path = self._atom_path(employee_id, key)
         if not path.exists():
             return

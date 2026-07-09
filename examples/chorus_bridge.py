@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from chorus.memory import EpisodicStore, SprintDelta
 
+from lattice.compose import build_default
 from lattice.contracts.episodic import EpisodicReader, RawEpisode
+from lattice.facade import Lattice
 
 
 class ChorusEpisodicReader:
@@ -40,3 +44,23 @@ def _to_raw(delta: SprintDelta) -> RawEpisode:
 
 def satisfies_episodic_reader(adapter: ChorusEpisodicReader) -> bool:
     return isinstance(adapter, EpisodicReader)
+
+
+def build_lattice_for_chorus(
+    company_root: str | Path,
+    *,
+    min_new_episodes: int | None = None,
+    min_cluster_size: int | None = None,
+) -> Lattice:
+    """Composition-root helper — wire lattice to a chorus company directory."""
+    root = Path(company_root)
+    store = EpisodicStore(root / "memory")
+    kwargs: dict[str, object] = {
+        "consolidated_root": root / "lattice",
+        "episodes": ChorusEpisodicReader(store),
+    }
+    if min_new_episodes is not None:
+        kwargs["min_new_episodes"] = min_new_episodes
+    if min_cluster_size is not None:
+        kwargs["min_cluster_size"] = min_cluster_size
+    return build_default(**kwargs)  # type: ignore[arg-type]

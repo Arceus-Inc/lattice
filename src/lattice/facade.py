@@ -84,11 +84,11 @@ class Lattice:
 
     def _advance_cursor(self, employee_id: str) -> None:
         episodes = self._episodes.records_for(employee_id)
-        watermark_run_id = episodes[0].run_id if episodes else None
-        if watermark_run_id is None:
+        if not episodes:
             return
+        latest = max(episodes, key=lambda ep: ep.created_at)
         self._cursor.advance(
             employee_id,
-            last_run_id=watermark_run_id,
+            last_run_id=latest.run_id,
             episodes_seen=len(episodes),
         )
