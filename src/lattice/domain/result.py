@@ -2,48 +2,31 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-from lattice.contracts.procedural import SkillDraft, SkillPatch
-from lattice.domain.operation import MemoryOperation
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
-class SemanticOutcome:
-    """Result of the P0 semantic pass."""
+class ValidationResult:
+    """Outcome of deterministic proposal validation."""
 
-    ops_applied: tuple[MemoryOperation, ...]
-    atoms_written: int
-
-
-@dataclass(frozen=True)
-class ProceduralOutcome:
-    """Result of the P1 procedural pass."""
-
-    patches_proposed: tuple[SkillPatch, ...]
-    patches_promoted: tuple[SkillPatch, ...]
-    drafts_proposed: tuple[SkillDraft, ...]
-    drafts_promoted: tuple[SkillDraft, ...]
+    ok: bool
+    errors: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
-class ConsolidationResult:
-    """Full pass result — THE LOOP output."""
+class ApplyResult:
+    """Outcome of applying a validated proposal."""
 
     employee_id: str
-    episodes_scanned: int
-    episodes_selected: int
-    semantic: SemanticOutcome | None
-    procedural: ProceduralOutcome | None
-    skipped: bool = False
+    ops_applied: int = 0
+    atoms_written: int = 0
+    patches_written: int = 0
+    errors: tuple[str, ...] = field(default_factory=tuple)
+
+    @property
+    def ok(self) -> bool:
+        return not self.errors
 
     @staticmethod
-    def skipped_for(employee_id: str, *, episodes_scanned: int) -> ConsolidationResult:
-        return ConsolidationResult(
-            employee_id=employee_id,
-            episodes_scanned=episodes_scanned,
-            episodes_selected=0,
-            semantic=None,
-            procedural=None,
-            skipped=True,
-        )
+    def failed(*errors: str, employee_id: str = "") -> ApplyResult:
+        return ApplyResult(employee_id=employee_id, errors=errors)

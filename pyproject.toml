@@ -54,7 +54,7 @@ chorus = { path = "../chorus", editable = true }
 packages = ["src/lattice", "src/lattice_cli"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/lattice", "src/lattice_cli", "tests", "docs", "examples", "README.md", "pyproject.toml"]
+include = ["src/lattice", "src/lattice_cli", "tests", "docs", "examples", "skills", "README.md", "pyproject.toml"]
 
 [tool.ruff]
 line-length = 100

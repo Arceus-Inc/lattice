@@ -2,22 +2,16 @@
 
 from __future__ import annotations
 
-from lattice.contracts.episodic import EpisodeBatch
-from lattice.domain.operation import (
-    MemoryOperation,
-    MemoryOperationKind,
-    PromotionVerdict,
-    PromotionVerdictKind,
-)
-from lattice.domain.result import ConsolidationResult, ProceduralOutcome, SemanticOutcome
+from lattice.domain.packet import Packet, PacketHint
+from lattice.domain.proposal import Op, OpKind, Proposal
+from lattice.domain.result import ApplyResult, ValidationResult
 
 __all__ = [
-    "ConsolidationResult",
-    "EpisodeBatch",
-    "MemoryOperation",
-    "MemoryOperationKind",
-    "ProceduralOutcome",
-    "PromotionVerdict",
-    "PromotionVerdictKind",
-    "SemanticOutcome",
+    "ApplyResult",
+    "Op",
+    "OpKind",
+    "Packet",
+    "PacketHint",
+    "Proposal",
+    "ValidationResult",
 ]

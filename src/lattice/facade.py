@@ -1,16 +1,24 @@
-"""Lattice facade — thin wiring over ConsolidationPass."""
+"""Lattice facade — five-function consolidation SDK."""
 
 from __future__ import annotations
 
-from lattice.consolidate.pass_ import ConsolidationPass
-from lattice.consolidate.prune import NoopPruner, Pruner
+from lattice.apply import apply_proposal
+from lattice.cluster import build_hints, cluster, gate_open, new_episodes, rank
+from lattice.contracts.atom import AtomStore
 from lattice.contracts.cursor import ConsolidationCursor
 from lattice.contracts.episodic import EpisodicReader
-from lattice.domain.result import ConsolidationResult
-from lattice.episodic.selector import EpisodeSelector
-from lattice.episodic.trigger import ConsolidationTrigger
-from lattice.procedural.consolidator import ProceduralConsolidator
-from lattice.semantic.consolidator import SemanticConsolidator
+from lattice.contracts.patch import PatchStore
+from lattice.directive import (
+    DEFAULT_MIN_CLUSTER_SIZE,
+    DEFAULT_MIN_NEW_EPISODES,
+    beat_end_notice,
+    beat_start_notice,
+)
+from lattice.domain.packet import Packet
+from lattice.domain.proposal import Proposal
+from lattice.domain.result import ApplyResult, ValidationResult
+from lattice.retrieve import render_context
+from lattice.validate import validate_proposal
 
 
 class Lattice:
@@ -21,29 +29,76 @@ class Lattice:
         *,
         episodes: EpisodicReader,
         cursor: ConsolidationCursor,
-        semantic: SemanticConsolidator,
-        procedural: ProceduralConsolidator,
-        min_new_episodes: int = 1,
-        selector_limit: int = 20,
-        pruner: Pruner | None = None,
+        atoms: AtomStore,
+        patches: PatchStore | None = None,
+        min_new_episodes: int = DEFAULT_MIN_NEW_EPISODES,
+        min_cluster_size: int = DEFAULT_MIN_CLUSTER_SIZE,
+        packet_limit: int = 20,
     ) -> None:
-        self._trigger = ConsolidationTrigger(
-            episodes=episodes,
-            cursor=cursor,
-            min_new_episodes=min_new_episodes,
-        )
-        self._pass = ConsolidationPass(
-            episodes=episodes,
-            cursor=cursor,
-            trigger=self._trigger,
-            selector=EpisodeSelector(episodes=episodes, limit=selector_limit),
-            semantic=semantic,
-            procedural=procedural,
-            pruner=pruner or NoopPruner(),
+        self._episodes = episodes
+        self._cursor = cursor
+        self._atoms = atoms
+        self._patches = patches
+        self._min_new = min_new_episodes
+        self._min_cluster = min_cluster_size
+        self._packet_limit = packet_limit
+
+    def gate_open(self, employee_id: str) -> bool:
+        watermark = self._cursor.get(employee_id)
+        episodes = self._episodes.records_for(employee_id)
+        return gate_open(
+            episodes,
+            watermark,
+            min_new=self._min_new,
+            min_cluster=self._min_cluster,
         )
 
-    def should_consolidate(self, employee_id: str) -> bool:
-        return self._trigger.should_run(employee_id)
+    def packet(self, employee_id: str) -> Packet | None:
+        if not self.gate_open(employee_id):
+            return None
+        watermark = self._cursor.get(employee_id)
+        all_episodes = self._episodes.records_for(employee_id)
+        fresh = new_episodes(all_episodes, watermark)
+        ranked = rank(fresh)[: self._packet_limit]
+        clusters = cluster(tuple(ranked))
+        hints = build_hints(clusters, min_cluster=self._min_cluster)
+        return Packet(employee_id=employee_id, engrams=tuple(ranked), hints=hints)
 
-    def consolidate(self, employee_id: str) -> ConsolidationResult:
-        return self._pass.run(employee_id)
+    def validate(self, proposal: Proposal) -> ValidationResult:
+        episodes = self._episodes.records_for(proposal.employee_id)
+        return validate_proposal(proposal, episodes=episodes, atoms=self._atoms)
+
+    def apply(self, proposal: Proposal) -> ApplyResult:
+        validation = self.validate(proposal)
+        result = apply_proposal(
+            proposal,
+            validation,
+            atoms=self._atoms,
+            patches=self._patches,
+        )
+        if result.ok:
+            self._advance_cursor(proposal.employee_id)
+        return result
+
+    def context(self, employee_id: str, query: str, *, k: int = 5) -> str:
+        atoms = self._atoms.list_active(employee_id)
+        return render_context(query, atoms, k=k)
+
+    def beat_end_teaser(self, employee_id: str) -> str:
+        """Short beat-end notice — empty when gate closed (no consolidation nudge)."""
+        return beat_end_notice(gate_open=self.gate_open(employee_id))
+
+    def beat_start_teaser(self, employee_id: str, query: str, *, k: int = 3) -> str:
+        """Optional distilled-memory lines for beat-start injection."""
+        return beat_start_notice(context=self.context(employee_id, query, k=k))
+
+    def _advance_cursor(self, employee_id: str) -> None:
+        episodes = self._episodes.records_for(employee_id)
+        watermark_run_id = episodes[0].run_id if episodes else None
+        if watermark_run_id is None:
+            return
+        self._cursor.advance(
+            employee_id,
+            last_run_id=watermark_run_id,
+            episodes_seen=len(episodes),
+        )

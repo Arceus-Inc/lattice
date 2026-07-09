@@ -26,19 +26,6 @@ class RawEpisode:
     body: str
 
 
-@dataclass(frozen=True)
-class EpisodeBatch:
-    """Episodes selected for one consolidation pass."""
-
-    employee_id: str
-    episodes: tuple[RawEpisode, ...]
-    watermark_run_id: str | None
-
-    @property
-    def selected_count(self) -> int:
-        return len(self.episodes)
-
-
 @runtime_checkable
 class EpisodicReader(Protocol):
     """Read-only access to chorus's raw episodic stream."""

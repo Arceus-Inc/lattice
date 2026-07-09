@@ -2,20 +2,15 @@
 
 from __future__ import annotations
 
-from lattice.domain import (
-    ConsolidationResult,
-    EpisodeBatch,
-    MemoryOperation,
-    ProceduralOutcome,
-    SemanticOutcome,
-)
+from lattice.domain import ApplyResult, Op, OpKind, Packet, Proposal, ValidationResult
 from lattice.facade import Lattice
 
 __all__ = [
-    "ConsolidationResult",
-    "EpisodeBatch",
+    "ApplyResult",
     "Lattice",
-    "MemoryOperation",
-    "ProceduralOutcome",
-    "SemanticOutcome",
+    "Op",
+    "OpKind",
+    "Packet",
+    "Proposal",
+    "ValidationResult",
 ]

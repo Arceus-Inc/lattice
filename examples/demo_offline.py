@@ -1,4 +1,4 @@
-"""Offline demo — noop consolidation over an in-memory episodic reader."""
+"""Offline demo — gate, packet, and apply over an in-memory episodic reader."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from pathlib import Path
 
 from lattice.compose import build_default
 from lattice.contracts.episodic import RawEpisode
+from lattice.domain.proposal import Op, OpKind, Proposal
 
 
 class InMemoryEpisodicReader:
@@ -39,32 +40,49 @@ def main() -> None:
             body="added exponential backoff",
         ),
         RawEpisode(
-            run_id="r_inc",
+            run_id="r_done_2",
             task_id="t_2",
             employee_id="e_be_1",
             role="backend_engineer",
             scope="project",
-            intent="wire auth",
-            outcome="incomplete",
-            score=0.4,
+            intent="add retry",
+            outcome="done",
+            score=0.8,
             created_at=now,
             recorded_at=now,
             artifacts=(),
-            files_touched=("src/api/auth.py",),
-            body="timed out mid-beat",
+            files_touched=("src/api/client.py",),
+            body="tuned backoff cap",
         ),
     )
     reader = InMemoryEpisodicReader(episodes)
-    lattice = build_default(consolidated_root=Path(".lattice-demo"), episodes=reader)
-    result = lattice.consolidate("e_be_1")
-    print(
-        f"scanned={result.episodes_scanned} selected={result.episodes_selected} "
-        f"skipped={result.skipped}"
+    lattice = build_default(
+        consolidated_root=Path(".lattice-demo"),
+        episodes=reader,
+        min_new_episodes=2,
+        min_cluster_size=2,
     )
-    if result.semantic is not None:
-        print(f"semantic_ops={len(result.semantic.ops_applied)}")
-    if result.procedural is not None:
-        print(f"skill_patches_proposed={len(result.procedural.patches_proposed)}")
+    if not lattice.gate_open("e_be_1"):
+        print("gate closed")
+        return
+    packet = lattice.packet("e_be_1")
+    assert packet is not None
+    print(f"packet engrams={len(packet.engrams)} hints={len(packet.hints)}")
+
+    proposal = Proposal(
+        employee_id="e_be_1",
+        ops=(
+            Op(
+                kind=OpKind.ASSERT,
+                key="api.retry",
+                value="exponential backoff with cap",
+                source_run_ids=("r_done", "r_done_2"),
+            ),
+        ),
+    )
+    result = lattice.apply(proposal)
+    print(f"apply ok={result.ok} atoms={result.atoms_written}")
+    print(lattice.context("e_be_1", "retry"))
 
 
 if __name__ == "__main__":
