@@ -46,18 +46,25 @@ G(c) ⇔ |E_new| ≥ N  ∧  max_cluster_size(E_new) ≥ K
 hints = { (key_template, run_ids) : |cluster| ≥ K }
 ```
 
-**Proposal:** agent supplies ops `O = { assert | supersede | patch }`.
+**Proposal:** agent supplies `patterns[]` (semantic) and `habits[]` (procedural). lattice compiles to internal ops and applies.
+
+```json
+{
+  "patterns": [{ "key", "claim", "source_run_ids", "supersedes?" }],
+  "habits": [{ "action": "evolve|create", "skill|slug", "section?", "body", "source_run_ids" }]
+}
+```
 
 **Validate** (v1 rules):
 
-1. Every op cites ≥1 `run_id` that exists for this employee
-2. `patch` ops require ≥1 cited engram with `outcome=done`
-3. Keys match `^[a-z][a-z0-9_.]+$`
-4. `assert` on key that is already active → error (use `supersede`)
-5. `supersede` must name an active key
-6. `|ops| ≤ L`
+1. ≥1 pattern or habit; total ≤ L
+2. Every item cites ≥1 valid `run_id` for this employee
+3. Pattern keys match `^[a-z][a-z0-9_.]+$`
+4. `assert` pattern on active key → error (set `supersedes`)
+5. Habit requires ≥1 cited engram with `outcome=done`
+6. Habit `create` slug must not collide with canonical role skills
 
-**Apply:** ADD via `assert`; replace via `supersede` (set `invalid_at`, write new); `patch` → overlay store. Advance cursor on success.
+**Apply:** patterns → atoms; habits `evolve` → patch overlay; habits `create` → draft overlay.
 
 **Retrieve:**
 
@@ -67,14 +74,15 @@ score(q, a) = w_r·recency(a) + w_b·overlap(q, a.key + a.value) + w_a·activati
 
 Return top‑k active atoms rendered as Markdown.
 
-## Types (4 primitives)
+## Types (5 primitives)
 
 | Type | Role | Storage |
 |---|---|---|
 | `RawEpisode` | engram vertex (read-only from chorus) | chorus |
-| `Atom` | `(key, value, src, t_valid, t_invalid, activation)` | `semantic/*.json` + `MEMORY.md` view |
-| `Op` / `Proposal` | agent-authored write intent | transient |
-| `SkillPatch` | procedural overlay | `evolved-skills/<slug>/SKILL.md` |
+| `PatternDraft` → `Atom` | declarative fact | `semantic/*.json` + `MEMORY.md` view |
+| `HabitDraft` → `SkillPatch` / `SkillDraft` | procedural playbook | `evolved-skills/<slug>/SKILL.md` |
+| `Proposal` | agent-authored patterns + habits | transient |
+| `PacketHint` | `pattern` or `habit` cluster hint | transient |
 
 No Bond, Schema, Script, Prior, Cue, PromotionCandidate, or lattice-owned LLM extractors.
 
@@ -84,7 +92,8 @@ No Bond, Schema, Script, Prior, Cue, PromotionCandidate, or lattice-owned LLM ex
 src/lattice/
   contracts/     episodic, atom, patch, cursor ports
   domain/        Proposal, Op, Packet, ValidationResult, ApplyResult
-  cluster.py     gate, rank, cluster, packet hints
+  compile.py     patterns/habits → internal ops
+  cluster.py     gate, rank, cluster, packet hints (pattern + habit)
   validate.py    pure validation rules
   apply.py       transactional writes
   retrieve.py    score + context markdown

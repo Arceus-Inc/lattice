@@ -35,7 +35,7 @@ def render_context(query: str, atoms: tuple[Atom, ...], *, k: int = DEFAULT_TOP_
     selected = top_k(query, atoms, k=k)
     if not selected:
         return ""
-    lines = ["## lattice context", ""]
+    lines = ["## lattice patterns", ""]
     for atom in selected:
         lines.append(f"- **{atom.key}**: {atom.value}")
     return "\n".join(lines) + "\n"

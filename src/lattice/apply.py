@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from lattice.compile import compile_proposal
 from lattice.contracts.atom import Atom, AtomStore
-from lattice.contracts.patch import PatchStore, SkillPatch
+from lattice.contracts.patch import PatchStore, SkillDraft, SkillPatch
 from lattice.domain.proposal import OpKind, Proposal
 from lattice.domain.result import ApplyResult, ValidationResult
 
@@ -23,9 +24,9 @@ def apply_proposal(
 
     now = datetime.now(UTC)
     atoms_written = 0
-    patches_written = 0
+    habits_written = 0
 
-    for op in proposal.ops:
+    for op in compile_proposal(proposal):
         if op.kind is OpKind.PATCH:
             if patches is None:
                 return ApplyResult.failed(
@@ -39,7 +40,23 @@ def apply_proposal(
                 source_run_ids=op.source_run_ids,
             )
             patches.apply_patch(proposal.employee_id, patch)
-            patches_written += 1
+            habits_written += 1
+            continue
+
+        if op.kind is OpKind.DRAFT:
+            if patches is None:
+                return ApplyResult.failed(
+                    "patch store not configured",
+                    employee_id=proposal.employee_id,
+                )
+            draft = SkillDraft(
+                slug=op.slug or "",
+                title=op.title or "",
+                body=op.value,
+                source_run_ids=op.source_run_ids,
+            )
+            patches.apply_draft(proposal.employee_id, draft)
+            habits_written += 1
             continue
 
         if op.kind is OpKind.SUPERSEDE and op.supersedes is not None:
@@ -57,7 +74,7 @@ def apply_proposal(
 
     return ApplyResult(
         employee_id=proposal.employee_id,
-        ops_applied=len(proposal.ops),
+        ops_applied=len(proposal.patterns) + len(proposal.habits),
         atoms_written=atoms_written,
-        patches_written=patches_written,
+        patches_written=habits_written,
     )

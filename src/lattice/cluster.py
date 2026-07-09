@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from lattice.contracts.cursor import ConsolidationWatermark
 from lattice.contracts.episodic import RawEpisode
-from lattice.domain.packet import PacketHint
+from lattice.domain.packet import HintKind, PacketHint
 
 
 def gate_open(
@@ -65,13 +65,29 @@ def build_hints(
     for group in clusters:
         if len(group) < min_cluster:
             continue
-        hints.append(
-            PacketHint(
-                key_template=_bucket_key(group[0]),
-                run_ids=tuple(ep.run_id for ep in group),
+        template = _bucket_key(group[0])
+        run_ids = tuple(ep.run_id for ep in group)
+        hints.append(PacketHint(kind=HintKind.PATTERN, key_template=template, run_ids=run_ids))
+        if _cluster_eligible_for_habit(group):
+            hints.append(
+                PacketHint(
+                    kind=HintKind.HABIT,
+                    key_template=_habit_slug(group),
+                    run_ids=run_ids,
+                )
             )
-        )
     return tuple(hints)
+
+
+def _cluster_eligible_for_habit(cluster: tuple[RawEpisode, ...]) -> bool:
+    """Habits require recurring done beats — stricter than patterns."""
+    return len(cluster) >= 2 and all(ep.outcome == "done" for ep in cluster)
+
+
+def _habit_slug(cluster: tuple[RawEpisode, ...]) -> str:
+    """Suggest an overlay slug from cluster features."""
+    template = _bucket_key(cluster[0])
+    return template.replace(".", "-").replace("_", "-")
 
 
 def _bucket_key(ep: RawEpisode) -> str:

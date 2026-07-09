@@ -17,6 +17,17 @@ class SkillPatch:
     metadata: dict[str, object] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class SkillDraft:
+    """A new evolved skill directory overlay."""
+
+    slug: str
+    title: str
+    body: str
+    source_run_ids: tuple[str, ...]
+    metadata: dict[str, object] = field(default_factory=dict)
+
+
 @runtime_checkable
 class PatchStore(Protocol):
     """Evolved SKILL.md overlays — never mutates chorus_employee canonical skills."""
@@ -24,5 +35,9 @@ class PatchStore(Protocol):
     def list_patches(self, employee_id: str) -> tuple[SkillPatch, ...]: ...
 
     def apply_patch(self, employee_id: str, patch: SkillPatch) -> str:
-        """Write an overlay; returns stable path id."""
+        """Write an overlay section; returns stable path id."""
+        ...
+
+    def apply_draft(self, employee_id: str, draft: SkillDraft) -> str:
+        """Write a new overlay skill; returns stable path id."""
         ...

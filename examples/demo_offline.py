@@ -1,4 +1,4 @@
-"""Offline demo — gate, packet, and apply over an in-memory episodic reader."""
+"""Offline demo — gate, packet, patterns and habits."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 
 from lattice.compose import build_default
 from lattice.contracts.episodic import RawEpisode
-from lattice.domain.proposal import Op, OpKind, Proposal
+from lattice.domain.proposal import HabitAction, HabitDraft, PatternDraft, Proposal
 
 
 class InMemoryEpisodicReader:
@@ -59,6 +59,7 @@ def main() -> None:
     lattice = build_default(
         consolidated_root=Path(".lattice-demo"),
         episodes=reader,
+        enable_patches=True,
         min_new_episodes=2,
         min_cluster_size=2,
     )
@@ -71,17 +72,25 @@ def main() -> None:
 
     proposal = Proposal(
         employee_id="e_be_1",
-        ops=(
-            Op(
-                kind=OpKind.ASSERT,
+        patterns=(
+            PatternDraft(
                 key="api.retry",
-                value="exponential backoff with cap",
+                claim="exponential backoff with cap",
                 source_run_ids=("r_done", "r_done_2"),
+            ),
+        ),
+        habits=(
+            HabitDraft(
+                action=HabitAction.CREATE,
+                slug="retry-discipline",
+                title="Retry discipline",
+                body="# Retry discipline\n\nRecall failure shape before patching.",
+                source_run_ids=("r_done_2",),
             ),
         ),
     )
     result = lattice.apply(proposal)
-    print(f"apply ok={result.ok} atoms={result.atoms_written}")
+    print(f"apply ok={result.ok} patterns={result.atoms_written} habits={result.patches_written}")
     print(lattice.context("e_be_1", "retry"))
 
 

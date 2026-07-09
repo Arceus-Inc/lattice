@@ -7,20 +7,20 @@ DEFAULT_MIN_NEW_EPISODES = 5
 DEFAULT_MIN_CLUSTER_SIZE = 2
 
 LATTICE_CONTEXT_DIRECTIVE = (
-    "Distilled facts live in lattice; raw beats live in episodic `recall()`. "
-    "At beat-start, call `lattice_context(query='…')` only when you need durable calibrations, "
-    "constraints, or project facts for THIS intent — not every beat. "
-    "For 'what did I try last time?' or regression search, use `recall()` or `recall(query='…')`."
+    "Distilled **patterns** live in lattice; raw beats live in episodic `recall()`. "
+    "Habits (procedural playbooks) live in evolved skills — load via the `skill` tool. "
+    "At beat-start, call `lattice_context(query='…')` only when you need durable patterns "
+    "for THIS intent — not every beat. "
+    "For 'what did I try last time?' use `recall()`; for 'how should I act?' use evolved skills."
 )
 
 LATTICE_CONSOLIDATE_DIRECTIVE = (
     "Consolidation is EXPENSIVE — never at every beat end. "
-    f"Durable memory updates run only after ≥{DEFAULT_MIN_NEW_EPISODES} new beats since the last pass "
-    "AND lattice detects a recurring cluster (same files/intent). "
-    "When the beat-end notice says the gate is OPEN: load the `lattice-consolidate` skill once, "
-    "call `lattice_packet()`, re-read cited runs via `recall()`, author Proposal JSON, "
-    "call `lattice_apply(proposal)`. "
-    "When the gate is closed: do nothing — episodic capture already happened; skip consolidation."
+    f"Durable updates run only after ≥{DEFAULT_MIN_NEW_EPISODES} new beats AND a recurring cluster. "
+    "When the beat-end notice says the gate is OPEN: load `lattice-consolidate` once, "
+    "call `lattice_packet()`, author a Proposal with `patterns` (facts) and/or `habits` "
+    "(evolve/create skill overlays), then `lattice_apply(proposal)`. "
+    "When the gate is closed: do nothing — episodic capture already happened."
 )
 
 BEAT_END_GATE_OPEN = (

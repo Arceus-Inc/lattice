@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from lattice.apply import apply_proposal
 from lattice.cluster import build_hints, cluster, gate_open, new_episodes, rank
 from lattice.contracts.atom import AtomStore
@@ -34,6 +36,7 @@ class Lattice:
         min_new_episodes: int = DEFAULT_MIN_NEW_EPISODES,
         min_cluster_size: int = DEFAULT_MIN_CLUSTER_SIZE,
         packet_limit: int = 20,
+        canonical_skills_root: Path | None = None,
     ) -> None:
         self._episodes = episodes
         self._cursor = cursor
@@ -42,6 +45,7 @@ class Lattice:
         self._min_new = min_new_episodes
         self._min_cluster = min_cluster_size
         self._packet_limit = packet_limit
+        self._canonical_skills_root = canonical_skills_root
 
     def gate_open(self, employee_id: str) -> bool:
         watermark = self._cursor.get(employee_id)
@@ -66,7 +70,12 @@ class Lattice:
 
     def validate(self, proposal: Proposal) -> ValidationResult:
         episodes = self._episodes.records_for(proposal.employee_id)
-        return validate_proposal(proposal, episodes=episodes, atoms=self._atoms)
+        return validate_proposal(
+            proposal,
+            episodes=episodes,
+            atoms=self._atoms,
+            canonical_skills_root=self._canonical_skills_root,
+        )
 
     def apply(self, proposal: Proposal) -> ApplyResult:
         validation = self.validate(proposal)

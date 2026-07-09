@@ -6,8 +6,8 @@ Canonical skill bundles for chorus employees. Materialize this directory into th
 
 | Skill | Tool(s) | When |
 |---|---|---|
-| `lattice-context` | `lattice_context` | Beat-start, targeted query when durable facts matter |
-| `lattice-consolidate` | `lattice_packet`, `lattice_apply` | Beat-end **only** when gate is open |
+| `lattice-context` | `lattice_context` | Beat-start — patterns (facts) when durable context matters |
+| `lattice-consolidate` | `lattice_packet`, `lattice_apply` | Beat-end — patterns + habits when gate is open |
 
 ## Beat policy
 

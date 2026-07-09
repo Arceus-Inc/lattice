@@ -7,7 +7,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, cast
 
-from lattice.contracts.patch import SkillPatch
+from lattice.contracts.patch import SkillDraft, SkillPatch
 
 
 class OverlaySkillStore:
@@ -32,21 +32,38 @@ class OverlaySkillStore:
         self._append_meta(employee_id, patch=patch)
         return str(dest)
 
+    def apply_draft(self, employee_id: str, draft: SkillDraft) -> str:
+        dest = self._skills_dir(employee_id) / draft.slug / "SKILL.md"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        header = f"# {draft.title}\n\n" if not draft.body.lstrip().startswith("#") else ""
+        dest.write_text(header + draft.body, encoding="utf-8")
+        self._append_meta(employee_id, draft=draft)
+        return str(dest)
+
     def _skills_dir(self, employee_id: str) -> Path:
         return self._root / employee_id / "evolved-skills"
 
     def _meta_path(self, employee_id: str) -> Path:
         return self._root / employee_id / "procedural-meta.json"
 
-    def _append_meta(self, employee_id: str, *, patch: SkillPatch) -> None:
+    def _append_meta(
+        self,
+        employee_id: str,
+        *,
+        patch: SkillPatch | None = None,
+        draft: SkillDraft | None = None,
+    ) -> None:
         meta = self._meta_path(employee_id)
-        payload: dict[str, list[dict[str, object]]] = {"patches": []}
+        payload: dict[str, list[dict[str, object]]] = {"patches": [], "drafts": []}
         if meta.exists():
             payload = cast(
                 dict[str, list[dict[str, object]]],
                 json.loads(meta.read_text(encoding="utf-8")),
             )
-        payload.setdefault("patches", []).append(asdict(patch))
+        if patch is not None:
+            payload.setdefault("patches", []).append(asdict(patch))
+        if draft is not None:
+            payload.setdefault("drafts", []).append(asdict(draft))
         meta.parent.mkdir(parents=True, exist_ok=True)
         meta.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 

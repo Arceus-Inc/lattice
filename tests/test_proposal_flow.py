@@ -7,7 +7,7 @@ from pathlib import Path
 
 from lattice.compose import build_default
 from lattice.contracts.episodic import RawEpisode
-from lattice.domain.proposal import Op, OpKind, Proposal
+from lattice.domain.proposal import PatternDraft, Proposal
 
 
 class _Reader:
@@ -52,15 +52,14 @@ def test_packet_and_apply_round_trip(tmp_path: Path) -> None:
     packet = lattice.packet("e1")
     assert packet is not None
     assert len(packet.engrams) == 2
-    assert len(packet.hints) == 1
+    assert len(packet.hints) == 2
 
     proposal = Proposal(
         employee_id="e1",
-        ops=(
-            Op(
-                kind=OpKind.ASSERT,
+        patterns=(
+            PatternDraft(
                 key="api.retry",
-                value="use exponential backoff",
+                claim="use exponential backoff",
                 source_run_ids=("r1", "r2"),
             ),
         ),
@@ -80,11 +79,10 @@ def test_validate_rejects_unknown_run_id(tmp_path: Path) -> None:
     lattice = build_default(consolidated_root=tmp_path, episodes=_Reader(episodes))
     proposal = Proposal(
         employee_id="e1",
-        ops=(
-            Op(
-                kind=OpKind.ASSERT,
+        patterns=(
+            PatternDraft(
                 key="api.retry",
-                value="x",
+                claim="x",
                 source_run_ids=("missing",),
             ),
         ),

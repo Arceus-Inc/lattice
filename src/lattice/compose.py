@@ -17,6 +17,7 @@ def build_default(
     min_new_episodes: int = DEFAULT_MIN_NEW_EPISODES,
     min_cluster_size: int = DEFAULT_MIN_CLUSTER_SIZE,
     enable_patches: bool = False,
+    canonical_skills_root: Path | None = None,
 ) -> Lattice:
     """Wire lattice with default file stores."""
     root = Path(consolidated_root)
@@ -30,4 +31,5 @@ def build_default(
         patches=patches,
         min_new_episodes=min_new_episodes,
         min_cluster_size=min_cluster_size,
+        canonical_skills_root=canonical_skills_root,
     )
