@@ -6,6 +6,8 @@
 
 ---
 
+See also: [`integration-plan.md`](integration-plan.md) — cross-repo wiring (chorus hooks, tools, skills, Greplica + neuroscience principles).
+
 ## 1. Problem
 
 Episodic memory (full beat prose) is cheap to append but expensive to re-read every beat. Agents need:
