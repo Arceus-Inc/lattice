@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 
 from lattice.compile import compile_proposal
 from lattice.contracts.atom import Atom, AtomStore
-from lattice.contracts.patch import PatchStore, SkillDraft, SkillPatch
 from lattice.domain.proposal import OpKind, Proposal
 from lattice.domain.result import ApplyResult, ValidationResult
 
@@ -16,49 +15,15 @@ def apply_proposal(
     validation: ValidationResult,
     *,
     atoms: AtomStore,
-    patches: PatchStore | None = None,
 ) -> ApplyResult:
-    """Apply a pre-validated proposal."""
+    """Apply a pre-validated pattern proposal."""
     if not validation.ok:
         return ApplyResult.failed(*validation.errors, employee_id=proposal.employee_id)
 
     now = datetime.now(UTC)
     atoms_written = 0
-    habits_written = 0
 
     for op in compile_proposal(proposal):
-        if op.kind is OpKind.PATCH:
-            if patches is None:
-                return ApplyResult.failed(
-                    "patch store not configured",
-                    employee_id=proposal.employee_id,
-                )
-            patch = SkillPatch(
-                skill_slug=op.skill or "",
-                section=op.section or "",
-                new_content=op.value,
-                source_run_ids=op.source_run_ids,
-            )
-            patches.apply_patch(proposal.employee_id, patch)
-            habits_written += 1
-            continue
-
-        if op.kind is OpKind.DRAFT:
-            if patches is None:
-                return ApplyResult.failed(
-                    "patch store not configured",
-                    employee_id=proposal.employee_id,
-                )
-            draft = SkillDraft(
-                slug=op.slug or "",
-                title=op.title or "",
-                body=op.value,
-                source_run_ids=op.source_run_ids,
-            )
-            patches.apply_draft(proposal.employee_id, draft)
-            habits_written += 1
-            continue
-
         if op.kind is OpKind.SUPERSEDE and op.supersedes is not None:
             atoms.invalidate(proposal.employee_id, op.supersedes, at=now)
 
@@ -74,7 +39,6 @@ def apply_proposal(
 
     return ApplyResult(
         employee_id=proposal.employee_id,
-        ops_applied=len(proposal.patterns) + len(proposal.habits),
-        atoms_written=atoms_written,
-        patches_written=habits_written,
+        patterns_applied=len(proposal.patterns),
+        patterns_written=atoms_written,
     )

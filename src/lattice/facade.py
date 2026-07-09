@@ -1,15 +1,12 @@
-"""Lattice facade — five-function consolidation SDK."""
+"""Lattice facade — pattern consolidation and retrieval."""
 
 from __future__ import annotations
-
-from pathlib import Path
 
 from lattice.apply import apply_proposal
 from lattice.cluster import build_hints, cluster, gate_open, new_episodes, rank
 from lattice.contracts.atom import AtomStore
 from lattice.contracts.cursor import ConsolidationCursor
 from lattice.contracts.episodic import EpisodicReader
-from lattice.contracts.patch import PatchStore
 from lattice.directive import (
     DEFAULT_MIN_CLUSTER_SIZE,
     DEFAULT_MIN_NEW_EPISODES,
@@ -24,7 +21,7 @@ from lattice.validate import validate_proposal
 
 
 class Lattice:
-    """The consolidation SDK entry point."""
+    """The consolidation SDK entry point — patterns only on this branch."""
 
     def __init__(
         self,
@@ -32,20 +29,16 @@ class Lattice:
         episodes: EpisodicReader,
         cursor: ConsolidationCursor,
         atoms: AtomStore,
-        patches: PatchStore | None = None,
         min_new_episodes: int = DEFAULT_MIN_NEW_EPISODES,
         min_cluster_size: int = DEFAULT_MIN_CLUSTER_SIZE,
         packet_limit: int = 20,
-        canonical_skills_root: Path | None = None,
     ) -> None:
         self._episodes = episodes
         self._cursor = cursor
         self._atoms = atoms
-        self._patches = patches
         self._min_new = min_new_episodes
         self._min_cluster = min_cluster_size
         self._packet_limit = packet_limit
-        self._canonical_skills_root = canonical_skills_root
 
     def gate_open(self, employee_id: str) -> bool:
         watermark = self._cursor.get(employee_id)
@@ -70,35 +63,23 @@ class Lattice:
 
     def validate(self, proposal: Proposal) -> ValidationResult:
         episodes = self._episodes.records_for(proposal.employee_id)
-        return validate_proposal(
-            proposal,
-            episodes=episodes,
-            atoms=self._atoms,
-            canonical_skills_root=self._canonical_skills_root,
-        )
+        return validate_proposal(proposal, episodes=episodes, atoms=self._atoms)
 
     def apply(self, proposal: Proposal) -> ApplyResult:
         validation = self.validate(proposal)
-        result = apply_proposal(
-            proposal,
-            validation,
-            atoms=self._atoms,
-            patches=self._patches,
-        )
+        result = apply_proposal(proposal, validation, atoms=self._atoms)
         if result.ok:
             self._advance_cursor(proposal.employee_id)
         return result
 
     def context(self, employee_id: str, query: str, *, k: int = 5) -> str:
-        atoms = self._atoms.list_active(employee_id)
-        return render_context(query, atoms, k=k)
+        patterns = self._atoms.list_active(employee_id)
+        return render_context(query, patterns, k=k)
 
     def beat_end_teaser(self, employee_id: str) -> str:
-        """Short beat-end notice — empty when gate closed (no consolidation nudge)."""
         return beat_end_notice(gate_open=self.gate_open(employee_id))
 
     def beat_start_teaser(self, employee_id: str, query: str, *, k: int = 3) -> str:
-        """Optional distilled-memory lines for beat-start injection."""
         return beat_start_notice(context=self.context(employee_id, query, k=k))
 
     def _advance_cursor(self, employee_id: str) -> None:

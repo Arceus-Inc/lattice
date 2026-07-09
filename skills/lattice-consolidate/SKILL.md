@@ -1,34 +1,27 @@
 ---
 name: lattice-consolidate
-description: Promote recurring beat evidence into lattice patterns (facts) and habits (skill overlays). Use ONLY at beat end when the gate is open — never every beat.
-when_to_use: Beat end ONLY, when the harness beat-end notice says "Lattice gate open". Do not run on every beat — consolidation is expensive. Skip entirely when the gate is closed.
+description: Promote recurring beat evidence into lattice patterns (semantic facts). Use ONLY at beat end when the gate is open — never every beat.
+when_to_use: Beat end ONLY, when the beat-end notice says "Lattice gate open". Skip when gate is closed.
 ---
 
-# lattice consolidate — patterns + habits (gate-gated)
+# lattice consolidate — patterns only (gate-gated)
 
-Consolidation turns **recurring episodic evidence** into:
-
-- **Patterns** — declarative facts (`api.retry`, `deploy.order`)
-- **Habits** — procedural playbooks (evolve an existing skill or create a new overlay)
-
-It is expensive. The gate ensures it runs only after enough new beats accumulate.
+Turn **recurring episodic evidence** into **durable patterns** (key/value facts). Expensive — only when gate opens.
 
 ## Gate
 
-1. **≥ N new beats** since last consolidation (default N = 5)
-2. **A cluster** of ≥ K beats share the same file prefix or intent (default K = 2)
+1. **≥ N new beats** since last consolidation (default 5)
+2. **Cluster** of ≥ K beats share file prefix or intent (default 2)
 
-Silent beat-end notice → gate **closed** → do nothing.
+Silent beat-end notice → gate closed → do nothing.
 
-## Workflow (gate open only)
+## Workflow
 
-### 1. Fetch the packet
+### 1. Packet
 
 ```
 lattice_packet()
 ```
-
-Returns engrams plus hints tagged `pattern` or `habit`.
 
 ### 2. Re-read evidence
 
@@ -36,7 +29,7 @@ Returns engrams plus hints tagged `pattern` or `habit`.
 recall(query='…')
 ```
 
-### 3. Author Proposal JSON
+### 3. Proposal JSON
 
 ```json
 {
@@ -48,49 +41,24 @@ recall(query='…')
       "source_run_ids": ["r_done_1", "r_done_2"],
       "supersedes": null
     }
-  ],
-  "habits": [
-    {
-      "action": "evolve",
-      "skill": "structuring-any-service",
-      "section": "Scale the layering",
-      "body": "Split when a module exceeds ~200 lines…",
-      "source_run_ids": ["r_done_1", "r_done_2"]
-    },
-    {
-      "action": "create",
-      "slug": "retry-discipline",
-      "title": "Retry discipline for HTTP clients",
-      "body": "# Retry discipline\n\nAlways recall the failure shape before patching.",
-      "source_run_ids": ["r_done_2"]
-    }
   ]
 }
 ```
 
-| Construct | use when |
+| field | use |
 |---|---|
-| `patterns[]` | durable **what is true** — cite recurring cluster |
-| `habits evolve` | patch a section of an existing skill overlay |
-| `habits create` | new overlay skill (slug must not collide with canonical role skills) |
-
-Habits require ≥1 cited engram with `outcome=done`.
+| `key` | hierarchical lowercase `api.retry` |
+| `claim` | short durable fact |
+| `supersedes` | set when replacing an active pattern key |
 
 ### 4. Apply
 
 ```
-lattice_apply(proposal=<json above>)
+lattice_apply(proposal=<json>)
 ```
 
-Prefer ≤10 total patterns + habits combined.
-
-## When NOT to consolidate
-
-- Gate closed (most beats)
-- Mid-beat
-- Verbatim episodic prose — patterns must be shorter; habits must be actionable
+≤10 patterns per proposal. No verbatim episodic prose.
 
 ## After apply
 
-- Patterns surface via `lattice_context`
-- Habits surface via `skill` tool on next beat (evolved-skills overlay)
+Next beat: `lattice_context(query)` surfaces stored patterns.

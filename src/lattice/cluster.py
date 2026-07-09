@@ -1,10 +1,10 @@
-"""Gate, rank, cluster, and packet hints — pure algorithms over engrams."""
+"""Gate, rank, cluster, and pattern hints — pure algorithms over engrams."""
 
 from __future__ import annotations
 
 from lattice.contracts.cursor import ConsolidationWatermark
 from lattice.contracts.episodic import RawEpisode
-from lattice.domain.packet import HintKind, PacketHint
+from lattice.domain.packet import PacketHint
 
 
 def gate_open(
@@ -60,34 +60,18 @@ def build_hints(
     *,
     min_cluster: int = 2,
 ) -> tuple[PacketHint, ...]:
-    """Deterministic hints from clusters large enough to consolidate."""
+    """Deterministic pattern hints from clusters large enough to consolidate."""
     hints: list[PacketHint] = []
     for group in clusters:
         if len(group) < min_cluster:
             continue
-        template = _bucket_key(group[0])
-        run_ids = tuple(ep.run_id for ep in group)
-        hints.append(PacketHint(kind=HintKind.PATTERN, key_template=template, run_ids=run_ids))
-        if _cluster_eligible_for_habit(group):
-            hints.append(
-                PacketHint(
-                    kind=HintKind.HABIT,
-                    key_template=_habit_slug(group),
-                    run_ids=run_ids,
-                )
+        hints.append(
+            PacketHint(
+                key_template=_bucket_key(group[0]),
+                run_ids=tuple(ep.run_id for ep in group),
             )
+        )
     return tuple(hints)
-
-
-def _cluster_eligible_for_habit(cluster: tuple[RawEpisode, ...]) -> bool:
-    """Habits require recurring done beats — stricter than patterns."""
-    return len(cluster) >= 2 and all(ep.outcome == "done" for ep in cluster)
-
-
-def _habit_slug(cluster: tuple[RawEpisode, ...]) -> str:
-    """Suggest an overlay slug from cluster features."""
-    template = _bucket_key(cluster[0])
-    return template.replace(".", "-").replace("_", "-")
 
 
 def _bucket_key(ep: RawEpisode) -> str:
