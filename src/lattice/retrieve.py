@@ -31,14 +31,22 @@ def top_k(query: str, atoms: tuple[Atom, ...], *, k: int = DEFAULT_TOP_K) -> tup
 
 
 def render_context(query: str, atoms: tuple[Atom, ...], *, k: int = DEFAULT_TOP_K) -> str:
-    """Render top-k atoms as markdown for beat-start injection."""
+    """Render top-k patterns with provenance cues for recall drill-down."""
     selected = top_k(query, atoms, k=k)
     if not selected:
         return ""
     lines = ["## lattice patterns", ""]
     for atom in selected:
-        lines.append(f"- **{atom.key}**: {atom.value}")
+        lines.extend(_format_pattern_lines(atom))
     return "\n".join(lines) + "\n"
+
+
+def _format_pattern_lines(atom: Atom) -> tuple[str, ...]:
+    out: list[str] = [f"- **{atom.key}**: {atom.value}"]
+    if atom.source_run_ids:
+        src = ", ".join(atom.source_run_ids)
+        out.append(f"  src: {src} — recall(query='…') for beat detail")
+    return tuple(out)
 
 
 def _overlap(query: str, atom: Atom) -> float:

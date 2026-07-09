@@ -32,7 +32,7 @@ if lattice.gate_open("e_be_1"):
             patterns=(
                 PatternDraft(
                     key="api.retry",
-                    claim="exponential backoff",
+                    claim="HTTP client retries use exponential backoff capped at 30s",
                     source_run_ids=("r1",),
                 ),
             ),

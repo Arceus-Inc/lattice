@@ -59,7 +59,7 @@ def test_packet_and_apply_round_trip(tmp_path: Path) -> None:
         patterns=(
             PatternDraft(
                 key="api.retry",
-                claim="use exponential backoff",
+                claim="use exponential backoff on HTTP clients; cap delay at 30s",
                 source_run_ids=("r1", "r2"),
             ),
         ),

@@ -10,6 +10,7 @@ from lattice.domain.proposal import PatternDraft, Proposal
 from lattice.domain.result import ValidationResult
 
 KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.]+$")
+MIN_CLAIM_CHARS = 20
 DEFAULT_MAX_PATTERNS = 20
 
 
@@ -59,6 +60,13 @@ def _validate_pattern_draft(
 
     if not KEY_PATTERN.match(pattern.key):
         errors.append(f"{prefix}: key {pattern.key!r} must match {KEY_PATTERN.pattern}")
+
+    claim = pattern.claim.strip()
+    if len(claim) < MIN_CLAIM_CHARS:
+        errors.append(
+            f"{prefix}: claim too short ({len(claim)} chars); "
+            f"use 1-2 sentences with constraint, scope, or file path (min {MIN_CLAIM_CHARS})"
+        )
 
     if pattern.supersedes is None:
         if pattern.key in active_keys:
