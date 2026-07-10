@@ -18,9 +18,9 @@ def test_context_renders_provenance(tmp_path: Path) -> None:
     sim.lattice.apply(valid_retry_proposal())
 
     context = sim.lattice.context("e_be_1", "retry api client")
-    assert "**api.retry**:" in context
+    assert "**api.retry**" in context
     assert "src: r_b1" in context
-    assert "recall(query=" in context
+    assert "get_run(run_id" in context
 
     # With a single active pattern, recency/activation weights still surface it even
     # when token overlap is zero — verify overlap path via a targeted query instead.

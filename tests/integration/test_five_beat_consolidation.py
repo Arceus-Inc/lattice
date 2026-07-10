@@ -45,7 +45,13 @@ def test_five_beat_golden_path(tmp_path: Path) -> None:
 
     memory_md = tmp_path / "e_be_1" / "MEMORY.md"
     assert memory_md.exists()
-    assert "exponential backoff" in memory_md.read_text()
+    memory_text = memory_md.read_text()
+    assert "exponential backoff" in memory_text
+    assert "LCB" in memory_text
+    assert "### api.retry" in memory_text
+
+    forget_result = sim.lattice.forget("e_be_1")
+    assert forget_result.atoms_discounted >= 1
 
     context = sim.lattice.context("e_be_1", "retry")
     assert "api.retry" in context

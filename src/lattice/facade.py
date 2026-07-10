@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from lattice.apply import apply_proposal
+from lattice.adjudicate import adjudicate_atoms
 from lattice.cluster import build_hints, cluster, gate_open, new_episodes, rank
 from lattice.contracts.atom import AtomStore
 from lattice.contracts.cursor import ConsolidationCursor
@@ -15,7 +16,8 @@ from lattice.directive import (
 )
 from lattice.domain.packet import Packet
 from lattice.domain.proposal import Proposal
-from lattice.domain.result import ApplyResult, ValidationResult
+from lattice.domain.result import AdjudicateResult, ApplyResult, ForgetResult, ValidationResult
+from lattice.forget import forget_employee
 from lattice.retrieve import render_context
 from lattice.validate import validate_proposal
 
@@ -72,6 +74,47 @@ class Lattice:
             self._advance_cursor(proposal.employee_id)
         return result
 
+    def adjudicate(self, employee_id: str) -> AdjudicateResult:
+        """Update pattern posteriors from episodic outcomes since last consolidation."""
+        watermark = self._cursor.get(employee_id)
+        episodes = self._episodes.records_for(employee_id)
+        fresh = new_episodes(episodes, watermark)
+        active = self._atoms.list_active(employee_id)
+        if not fresh or not active:
+            return AdjudicateResult(
+                employee_id=employee_id,
+                atoms_updated=0,
+                episodes_processed=len(fresh),
+            )
+
+        updated_atoms = adjudicate_atoms(active, episodes, watermark)
+        atoms_updated = 0
+        for before, after in zip(active, updated_atoms, strict=True):
+            if after.stats != before.stats:
+                self._atoms.write(after)
+                atoms_updated += 1
+
+        return AdjudicateResult(
+            employee_id=employee_id,
+            atoms_updated=atoms_updated,
+            episodes_processed=len(fresh),
+        )
+
+    def forget(self, employee_id: str) -> ForgetResult:
+        """Discount own-evidence counts and invalidate patterns below floor."""
+        discounted, invalidated = forget_employee(employee_id, atoms=self._atoms)
+        return ForgetResult(
+            employee_id=employee_id,
+            atoms_discounted=discounted,
+            atoms_invalidated=invalidated,
+        )
+
+    def has_fresh_episodes(self, employee_id: str) -> bool:
+        """True when episodic deltas exist since the consolidation cursor."""
+        watermark = self._cursor.get(employee_id)
+        episodes = self._episodes.records_for(employee_id)
+        return len(new_episodes(episodes, watermark)) > 0
+
     def context(self, employee_id: str, query: str, *, k: int = 5) -> str:
         patterns = self._atoms.list_active(employee_id)
         return render_context(query, patterns, k=k)
@@ -86,7 +129,7 @@ class Lattice:
         episodes = self._episodes.records_for(employee_id)
         if not episodes:
             return
-        latest = max(episodes, key=lambda ep: ep.created_at)
+        latest = max(episodes, key=lambda episode: episode.created_at)
         self._cursor.advance(
             employee_id,
             last_run_id=latest.run_id,

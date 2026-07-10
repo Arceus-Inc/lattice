@@ -42,10 +42,10 @@ def render_context(query: str, atoms: tuple[Atom, ...], *, k: int = DEFAULT_TOP_
 
 
 def _format_pattern_lines(atom: Atom) -> tuple[str, ...]:
-    out: list[str] = [f"- **{atom.key}**: {atom.value}"]
+    out: list[str] = [f"- **{atom.key}**", "", atom.value.strip(), ""]
     if atom.source_run_ids:
         src = ", ".join(atom.source_run_ids)
-        out.append(f"  src: {src} — recall(query='…') for beat detail")
+        out.append(f"  src: {src} — get_run(run_id) for full beat prose")
     return tuple(out)
 
 

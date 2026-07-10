@@ -22,4 +22,4 @@ def test_render_context_includes_source_run_ids() -> None:
     context = render_context("retry", atoms)
     assert "api.retry" in context
     assert "r_done_1" in context
-    assert "recall" in context
+    assert "get_run(run_id)" in context

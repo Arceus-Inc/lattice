@@ -8,6 +8,7 @@ from lattice.compile import compile_proposal
 from lattice.contracts.atom import Atom, AtomStore
 from lattice.domain.proposal import OpKind, Proposal
 from lattice.domain.result import ApplyResult, ValidationResult
+from lattice.domain.stats import PatternStats
 
 
 def apply_proposal(
@@ -33,6 +34,10 @@ def apply_proposal(
             employee_id=proposal.employee_id,
             source_run_ids=op.source_run_ids,
             created_at=now,
+            stats=PatternStats(
+                alpha_own=0.5 + float(len(op.source_run_ids)),
+                beta_own=0.5,
+            ),
         )
         atoms.write(atom)
         atoms_written += 1

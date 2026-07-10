@@ -65,7 +65,8 @@ def _validate_pattern_draft(
     if len(claim) < MIN_CLAIM_CHARS:
         errors.append(
             f"{prefix}: claim too short ({len(claim)} chars); "
-            f"use 1-2 sentences with constraint, scope, or file path (min {MIN_CLAIM_CHARS})"
+            "write 2–3 plain-English sentences a teammate could read without decoding "
+            f"parentheticals or shorthand (min {MIN_CLAIM_CHARS})"
         )
 
     if pattern.supersedes is None:

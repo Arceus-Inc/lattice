@@ -6,17 +6,20 @@ DEFAULT_MIN_NEW_EPISODES = 5
 DEFAULT_MIN_CLUSTER_SIZE = 2
 
 LATTICE_CONTEXT_DIRECTIVE = (
-    "Distilled **patterns** live in lattice; raw beats live in episodic `recall()`. "
+    "Distilled **patterns** live in lattice; raw beats live in episodic memory. "
     "At beat-start, call `lattice_context(query='…')` only when you need durable patterns "
     "for THIS intent — not every beat. "
-    "For 'what did I try last time?' use `recall()` or `recall(query='…')`."
+    "For beat orientation use `recall()` or `recall(query='…')` (slim hits). "
+    "For full beat prose use `get_run(run_id)` — especially on `src:` ids from lattice_context."
 )
 
 LATTICE_CONSOLIDATE_DIRECTIVE = (
     "Consolidation is EXPENSIVE — never at every beat end. "
     f"Pattern updates run only after ≥{DEFAULT_MIN_NEW_EPISODES} new beats AND a recurring cluster. "
     "When the beat-end notice says the gate is OPEN: load `lattice-consolidate` once, "
-    "call `lattice_packet()`, author a Proposal with `patterns[]`, then `lattice_apply(proposal)`. "
+    "call `lattice_packet()`, `recall(query)` + `get_run(run_id)` per cited beat, "
+    "author a Proposal with `patterns[]` (claims in clear plain English), "
+    "then `lattice_apply(proposal)`. "
     "When the gate is closed: do nothing — episodic capture already happened."
 )
 

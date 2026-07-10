@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from lattice.domain.stats import PatternStats
 
 
 @dataclass(frozen=True)
@@ -18,6 +21,7 @@ class Atom:
     created_at: datetime
     invalid_at: datetime | None = None
     activation: float = 1.0
+    stats: PatternStats | None = None
 
 
 @runtime_checkable

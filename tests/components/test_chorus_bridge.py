@@ -13,9 +13,9 @@ from chorus.memory import EpisodicStore, SprintDelta  # noqa: E402
 
 from examples.chorus_bridge import (  # noqa: E402
     ChorusEpisodicReader,
-    build_lattice_for_chorus,
     satisfies_episodic_reader,
 )
+from chorus_tools._lattice_bridge import build_lattice_for_chorus  # noqa: E402
 from lattice.domain.proposal import PatternDraft, Proposal  # noqa: E402
 
 

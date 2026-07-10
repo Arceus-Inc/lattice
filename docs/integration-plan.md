@@ -1,6 +1,6 @@
 # Consolidation system — lattice × chorus integration plan
 
-**Branch:** `feat/patterns-only` · **Companion:** [v1-plan.md](v1-plan.md)
+**Branch:** `feat/patterns-only` · **Companion:** [v1-plan.md](v1-plan.md) · [consolidation-adjudication-design.md](consolidation-adjudication-design.md)
 
 > *Episodic memory is the hippocampus — fast, verbatim, forgetful unless replayed.*  
 > *Pattern memory is cortex — slow to form, compact, durable.*  
@@ -362,7 +362,7 @@ Retrieval output (lattice):
 
 ```markdown
 - **api.retry**: HTTP retries use exponential backoff capped at 30s
-  src: r_done_1, r_done_2 — recall(query='…') for beat detail
+  src: r_done_1, r_done_2 — get_run(run_id) for full beat prose
 ```
 
 ---
@@ -439,7 +439,7 @@ Retrieval output (lattice):
 2. Gate opens; beat-end teaser appears **once**.  
 3. Agent (or test harness) submits valid `Proposal`; `lattice_apply` succeeds.  
 4. Beat 6: `lattice_context("…")` returns pattern with `src:` ids.  
-5. `recall(query)` retrieves cited beat prose.  
+5. `get_run(run_id)` retrieves cited beat prose (`recall(query)` for slim search first).  
 6. No consolidation on beats 1–4 (gate closed).  
 7. Import graph clean; beat never fails because lattice threw.
 

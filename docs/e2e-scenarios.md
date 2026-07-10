@@ -289,7 +289,7 @@ Incrementally appends `RawEpisode` records to a growing `EpisodicReader`, rebuil
 
 - Markdown contains `**api.retry**:`
 - Contains `src: r_b1, r_b2`
-- Contains `recall(query=`
+- Contains `get_run(run_id`
 - Targeted query `"exponential backoff HTTP"` returns `api.retry` (token overlap path)
 - Note: with a single active pattern, any query may still surface it via recency/activation weights
 

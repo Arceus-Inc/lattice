@@ -2,6 +2,8 @@
 
 **Status:** `feat/patterns-only` · semantic **patterns** in scope · **habits** deferred (live on `main`).
 
+**Companion:** [consolidation-adjudication-design.md](consolidation-adjudication-design.md) — outcome-grounded Beta–Bernoulli adjudication layer (draft).
+
 **North star:** chorus appends engrams; lattice ranks evidence, validates agent proposals, stores patterns, retrieves by score; the employee agent is the only author. No lattice-owned LLM extractors.
 
 ---
@@ -246,7 +248,7 @@ At retrieval, context renders provenance so agents can drill down:
 ## lattice patterns
 
 - **api.retry**: HTTP retries use exponential backoff capped at 30s
-  src: r_done_1, r_done_2 — recall(query='…') for beat detail
+  src: r_done_1, r_done_2 — get_run(run_id) for full beat prose
 ```
 
 **Two-channel read model:**
@@ -254,7 +256,8 @@ At retrieval, context renders provenance so agents can drill down:
 | Need | Tool |
 |---|---|
 | Durable fact / calibration | `lattice_context(query)` |
-| What happened, files, prose | `recall()` / `recall(query)` |
+| Find past beats (slim hits) | `recall()` / `recall(query)` |
+| Full beat prose | `get_run(run_id)` |
 
 ---
 
@@ -275,7 +278,7 @@ sequenceDiagram
     L-->>A: (silent — no consolidate)
   else gate open
     L->>A: beat_end_teaser + packet
-    A->>C: recall(query) for cited runs
+    A->>C: recall(query) + get_run(run_id) per cited beat
     A->>A: author Proposal.patterns[]
     A->>L: apply(proposal)
     L->>L: validate → write atoms → advance cursor
@@ -285,7 +288,7 @@ sequenceDiagram
   A->>L: context(intent)
   L-->>A: patterns + src hints
   opt need detail
-    A->>C: recall(query)
+    A->>C: get_run(run_id) on src: ids
   end
 ```
 
