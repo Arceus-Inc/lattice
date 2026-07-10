@@ -22,6 +22,7 @@ class Atom:
     invalid_at: datetime | None = None
     activation: float = 1.0
     stats: PatternStats | None = None
+    key_files: tuple[str, ...] = ()
 
 
 @runtime_checkable

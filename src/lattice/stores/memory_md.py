@@ -52,6 +52,7 @@ class MemoryMdStore:
             invalid_at=at,
             activation=atom.activation,
             stats=atom.stats,
+            key_files=atom.key_files,
         )
         path.write_text(json.dumps(_atom_to_json(invalidated), indent=2), encoding="utf-8")
         self._rewrite_memory_md(employee_id)
@@ -111,6 +112,7 @@ def _atom_to_json(atom: Atom) -> dict[str, object]:
         "source_run_ids": list(atom.source_run_ids),
         "created_at": atom.created_at.isoformat(),
         "activation": atom.activation,
+        "key_files": list(atom.key_files),
     }
     if atom.invalid_at is not None:
         data["invalid_at"] = atom.invalid_at.isoformat()
@@ -131,6 +133,7 @@ def _atom_from_json(payload: dict[str, Any]) -> Atom:
     invalid_raw = payload.get("invalid_at")
     invalid_at = datetime.fromisoformat(str(invalid_raw)) if invalid_raw else None
     source_ids = payload.get("source_run_ids", ())
+    key_files_raw = payload.get("key_files", ())
     stats_raw = payload.get("stats")
     stats = _stats_from_json(cast(dict[str, Any], stats_raw)) if isinstance(stats_raw, dict) else None
     return Atom(
@@ -142,6 +145,7 @@ def _atom_from_json(payload: dict[str, Any]) -> Atom:
         invalid_at=invalid_at,
         activation=float(payload.get("activation", 1.0)),
         stats=stats,
+        key_files=tuple(str(item) for item in cast(tuple[object, ...], key_files_raw)),
     )
 
 

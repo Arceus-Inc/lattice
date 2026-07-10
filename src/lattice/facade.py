@@ -69,7 +69,14 @@ class Lattice:
 
     def apply(self, proposal: Proposal) -> ApplyResult:
         validation = self.validate(proposal)
-        result = apply_proposal(proposal, validation, atoms=self._atoms)
+        episodes = self._episodes.records_for(proposal.employee_id)
+        episodes_by_run_id = {episode.run_id: episode for episode in episodes}
+        result = apply_proposal(
+            proposal,
+            validation,
+            atoms=self._atoms,
+            episodes_by_run_id=episodes_by_run_id,
+        )
         if result.ok:
             self._advance_cursor(proposal.employee_id)
         return result

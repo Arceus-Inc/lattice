@@ -24,6 +24,7 @@ dependencies = [
   # a consumer's composition root wires chorus's concrete classes into lattice's ports (spec: no
   # sideways import).
   "dream",
+  "rank-bm25>=0.2.2",
 ]
 
 [project.optional-dependencies]

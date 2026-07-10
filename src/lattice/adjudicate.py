@@ -17,18 +17,26 @@ from lattice.domain.stats import (
 )
 
 
+def key_files_from_runs(
+    source_run_ids: tuple[str, ...],
+    episodes_by_run_id: dict[str, RawEpisode],
+) -> tuple[str, ...]:
+    """Sorted union of files_touched from cited source runs."""
+    files: set[str] = set()
+    for run_id in source_run_ids:
+        episode = episodes_by_run_id.get(run_id)
+        if episode is None:
+            continue
+        files.update(episode.files_touched)
+    return tuple(sorted(files))
+
+
 def key_files_for_atom(
     atom: Atom,
     episodes_by_run_id: dict[str, RawEpisode],
 ) -> frozenset[str]:
     """Union of files_touched from cited source runs."""
-    files: set[str] = set()
-    for run_id in atom.source_run_ids:
-        episode = episodes_by_run_id.get(run_id)
-        if episode is None:
-            continue
-        files.update(episode.files_touched)
-    return frozenset(files)
+    return frozenset(key_files_from_runs(atom.source_run_ids, episodes_by_run_id))
 
 
 def fingerprint_overlap(episode: RawEpisode, key_files: frozenset[str]) -> bool:

@@ -30,7 +30,10 @@ def test_apply_failed_validation_does_not_write(tmp_path: Path) -> None:
 
 
 def test_apply_assert_writes_atom(tmp_path: Path) -> None:
+    from tests.integration.conftest import make_episode
+
     atoms = MemoryMdStore(tmp_path)
+    episodes = {"r1": make_episode(run_id="r1", employee_id="e1", files_touched=("src/api/client.py",))}
     proposal = Proposal(
         employee_id="e1",
         patterns=(
@@ -41,12 +44,18 @@ def test_apply_assert_writes_atom(tmp_path: Path) -> None:
             ),
         ),
     )
-    result = apply_proposal(proposal, ValidationResult(ok=True), atoms=atoms)
+    result = apply_proposal(
+        proposal,
+        ValidationResult(ok=True),
+        atoms=atoms,
+        episodes_by_run_id=episodes,
+    )
     assert result.ok is True
     assert result.patterns_written == 1
     active = atoms.list_active("e1")
     assert len(active) == 1
     assert active[0].key == "api.retry"
+    assert active[0].key_files == ("src/api/client.py",)
 
 
 def test_apply_supersede_invalidates_old(tmp_path: Path) -> None:

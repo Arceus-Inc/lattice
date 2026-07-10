@@ -19,10 +19,13 @@ def _atom(key: str, claim: str, *, days_ago: int = 0) -> Atom:
     )
 
 
-def test_score_prefers_token_overlap() -> None:
+def test_score_prefers_bm25_relevance() -> None:
     retry = _atom("api.retry", "HTTP retries use exponential backoff capped at 30s")
     unrelated = _atom("ui.theme", "dark mode uses CSS variables in src/ui/theme.css")
-    assert score("retry HTTP backoff", retry) > score("retry HTTP backoff", unrelated)
+    atoms = (retry, unrelated)
+    assert score("retry HTTP backoff", retry, atoms=atoms) > score(
+        "retry HTTP backoff", unrelated, atoms=atoms
+    )
 
 
 def test_top_k_limits_results() -> None:

@@ -64,3 +64,27 @@ def test_context_is_per_employee(tmp_path: Path) -> None:
 
     assert "api.retry" in be_context
     assert "api.retry" not in fe_context
+
+
+def test_design_query_does_not_surface_backend_retry_pattern(tmp_path: Path) -> None:
+    episodes = (make_episode(run_id="r_be", employee_id="e_be_1"),)
+    lattice = build_default(
+        consolidated_root=tmp_path,
+        episodes=_GrowingReader(list(episodes)),
+        min_new_episodes=1,
+        min_cluster_size=1,
+    )
+    lattice.apply(
+        Proposal(
+            employee_id="e_be_1",
+            patterns=(
+                PatternDraft(
+                    key="api.retry",
+                    claim="HTTP retries use exponential backoff capped at 30s",
+                    source_run_ids=("r_be",),
+                ),
+            ),
+        )
+    )
+    context = lattice.context("e_be_1", "design tokens typography")
+    assert "api.retry" not in context
