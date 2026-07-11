@@ -1,4 +1,9 @@
-"""Deterministic proposal validation — no LLM."""
+"""Deterministic proposal validation — no LLM.
+
+Hermes-aligned habit gates (see docs/hermes-skill-granularity-research.md):
+- Facts belong in patterns[]; sticky-note / diary content is rejected as habits.
+- EVOLVE (patch existing umbrella) is the default path; CREATE is rare and strict.
+"""
 
 from __future__ import annotations
 
@@ -13,7 +18,19 @@ from lattice.domain.result import ValidationResult
 KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.]+$")
 SLUG_PATTERN = re.compile(r"^[a-z][a-z0-9-]+$")
 MIN_CLAIM_CHARS = 20
+MIN_EVOLVE_BODY_CHARS = 200
+MIN_CREATE_BODY_CHARS = 500
 DEFAULT_MAX_OPS = 20
+REQUIRED_CREATE_MARKERS = ("## When to Use", "## Pitfalls")
+# Session diary / one-off narrative markers (Hermes #12812 / #23004).
+_DIARY_PATTERNS = (
+    re.compile(r"\bwe found\b", re.IGNORECASE),
+    re.compile(r"\btoday we\b", re.IGNORECASE),
+    re.compile(r"\bon \d{4}-\d{2}-\d{2}\b"),
+    re.compile(r"\bin this session\b", re.IGNORECASE),
+)
+# CREATE slugs that look like file-prefix / session artifacts, not class-level names.
+_FILE_PREFIX_SLUGS = frozenset({"src", "lib", "app", "pkg", "cmd", "test", "tests"})
 
 
 def validate_proposal(
@@ -36,6 +53,7 @@ def validate_proposal(
     known_runs = {ep.run_id: ep for ep in episodes if ep.employee_id == proposal.employee_id}
     active_keys = {atom.key for atom in atoms.list_active(proposal.employee_id)}
     canonical_slugs = _canonical_slugs(canonical_skills_root)
+    evolved_slugs = _evolved_slugs(atoms, proposal.employee_id)
 
     for index, pattern in enumerate(proposal.patterns):
         prefix = f"patterns[{index}]"
@@ -51,6 +69,7 @@ def validate_proposal(
                 prefix,
                 known_runs=known_runs,
                 canonical_slugs=canonical_slugs,
+                known_skill_slugs=canonical_slugs | evolved_slugs,
             )
         )
 
@@ -104,6 +123,7 @@ def _validate_habit_draft(
     *,
     known_runs: dict[str, RawEpisode],
     canonical_slugs: set[str],
+    known_skill_slugs: set[str],
 ) -> list[str]:
     errors: list[str] = []
 
@@ -122,28 +142,125 @@ def _validate_habit_draft(
     ):
         errors.append(f"{prefix}: habit requires a cited engram with outcome=done")
 
-    if not habit.body.strip():
+    body = habit.body.strip()
+    if not body:
         errors.append(f"{prefix}: body must not be empty")
+        return errors
+
+    diary_hit = _diary_match(body)
+    if diary_hit is not None:
+        errors.append(
+            f"{prefix}: body looks like a one-off diary entry ({diary_hit!r}); "
+            "put facts in patterns[] or evolve a class-level procedure — not a session narrative"
+        )
 
     if habit.action is HabitAction.EVOLVE:
-        if not habit.skill or not habit.section:
-            errors.append(f"{prefix}: evolve habit requires skill and section")
-        if habit.skill and not SLUG_PATTERN.match(habit.skill):
-            errors.append(f"{prefix}: skill {habit.skill!r} must match {SLUG_PATTERN.pattern}")
+        errors.extend(
+            _validate_evolve(
+                habit,
+                prefix,
+                body=body,
+                known_skill_slugs=known_skill_slugs,
+            )
+        )
         return errors
 
     if habit.action is HabitAction.CREATE:
-        if not habit.slug or not habit.title:
-            errors.append(f"{prefix}: create habit requires slug and title")
-        if habit.slug and not SLUG_PATTERN.match(habit.slug):
-            errors.append(f"{prefix}: slug {habit.slug!r} must match {SLUG_PATTERN.pattern}")
-        if habit.slug and habit.slug in canonical_slugs:
-            errors.append(f"{prefix}: slug {habit.slug!r} collides with a canonical role skill")
+        errors.extend(
+            _validate_create(
+                habit,
+                prefix,
+                body=body,
+                canonical_slugs=canonical_slugs,
+            )
+        )
 
     return errors
+
+
+def _validate_evolve(
+    habit: HabitDraft,
+    prefix: str,
+    *,
+    body: str,
+    known_skill_slugs: set[str],
+) -> list[str]:
+    errors: list[str] = []
+    if not habit.skill or not habit.section:
+        errors.append(f"{prefix}: evolve habit requires skill and section")
+    if habit.skill and not SLUG_PATTERN.match(habit.skill):
+        errors.append(f"{prefix}: skill {habit.skill!r} must match {SLUG_PATTERN.pattern}")
+    if habit.skill and known_skill_slugs and habit.skill not in known_skill_slugs:
+        errors.append(
+            f"{prefix}: unknown skill {habit.skill!r}; "
+            "evolve targets a canonical role skill or prior evolved overlay"
+        )
+    if len(body) < MIN_EVOLVE_BODY_CHARS:
+        errors.append(
+            f"{prefix}: evolve body too short ({len(body)} chars); "
+            f"write a procedure section with steps/pitfalls (min {MIN_EVOLVE_BODY_CHARS})"
+        )
+    return errors
+
+
+def _validate_create(
+    habit: HabitDraft,
+    prefix: str,
+    *,
+    body: str,
+    canonical_slugs: set[str],
+) -> list[str]:
+    errors: list[str] = []
+    if not habit.slug or not habit.title:
+        errors.append(f"{prefix}: create habit requires slug and title")
+    if habit.slug and not SLUG_PATTERN.match(habit.slug):
+        errors.append(f"{prefix}: slug {habit.slug!r} must match {SLUG_PATTERN.pattern}")
+    if habit.slug and habit.slug in canonical_slugs:
+        errors.append(f"{prefix}: slug {habit.slug!r} collides with a canonical role skill")
+    if habit.slug and (habit.slug in _FILE_PREFIX_SLUGS or len(habit.slug) < 8):
+        errors.append(
+            f"{prefix}: slug {habit.slug!r} is not class-level; "
+            "prefer a reusable playbook name (e.g. http-retry-playbook), not a file prefix"
+        )
+    if len(body) < MIN_CREATE_BODY_CHARS:
+        errors.append(
+            f"{prefix}: create body too short ({len(body)} chars); "
+            f"class-level skills need Overview/When to Use/Procedure/Pitfalls "
+            f"(min {MIN_CREATE_BODY_CHARS})"
+        )
+    for marker in REQUIRED_CREATE_MARKERS:
+        if marker not in body:
+            errors.append(
+                f"{prefix}: create body missing {marker!r}; "
+                "CREATE is for class-level umbrellas, not sticky notes — prefer EVOLVE"
+            )
+    return errors
+
+
+def _diary_match(body: str) -> str | None:
+    for pattern in _DIARY_PATTERNS:
+        match = pattern.search(body)
+        if match is not None:
+            return match.group(0)
+    return None
 
 
 def _canonical_slugs(root: Path | None) -> set[str]:
     if root is None or not root.is_dir():
         return set()
     return {path.name for path in root.iterdir() if path.is_dir() and (path / "SKILL.md").exists()}
+
+
+def _evolved_slugs(atoms: AtomStore, employee_id: str) -> set[str]:
+    """Discover prior evolved overlays when the atom store exposes a root path."""
+    root = getattr(atoms, "root", None)
+    if root is None:
+        return set()
+    evolved = Path(root) / employee_id / "evolved-skills"
+    if not evolved.is_dir():
+        return set()
+    return {
+        path.name
+        for path in evolved.iterdir()
+        if path.is_dir() and (path / "SKILL.md").exists()
+    }

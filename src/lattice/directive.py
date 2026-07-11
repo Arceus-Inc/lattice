@@ -8,12 +8,15 @@ DEFAULT_MIN_CLUSTER_SIZE = 2
 
 LATTICE_CONTEXT_DIRECTIVE = (
     "Distilled **patterns** live in lattice; raw beats live in episodic memory. "
-    "Habits (procedural playbooks) live in evolved skills — load via the `skill` tool. "
+    "Procedural playbooks live in versioned skills — load via the `skill` tool / "
+    "`skill_manage(view)`. "
     "At beat-start, call `lattice_context(query='…')` only when you need durable patterns "
     "for THIS intent — not every beat. "
     "For beat orientation use `recall()` or `recall(query='…')` (slim hits). "
     "For full beat prose use `get_run(run_id)` — especially on `src:` ids from lattice_context. "
-    "For 'how should I act?' use evolved skills, not lattice_context."
+    "For 'how should I act?' use skills, not lattice_context. "
+    "Sticky-note facts → patterns[]; class-level procedures → skill_manage(evolve); "
+    "never CREATE a micro-skill for a one-off or diary entry."
 )
 
 LATTICE_CONSOLIDATE_DIRECTIVE = (
@@ -21,14 +24,15 @@ LATTICE_CONSOLIDATE_DIRECTIVE = (
     f"Durable updates run only after ≥{DEFAULT_MIN_NEW_EPISODES} new beats AND a recurring cluster. "
     "When the beat-end notice says the gate is OPEN: load `lattice-consolidate` once, "
     "call `lattice_packet()`, `recall(query)` + `get_run(run_id)` per cited beat, "
-    "author a Proposal with `patterns[]` (claims in clear plain English) and/or `habits[]` "
-    "(evolve/create skill overlays), then `lattice_apply(proposal)`. "
+    "then `lattice_apply({patterns:[…]})` for facts and `skill_manage(evolve|patch|create)` "
+    "for procedures (never habits[] on lattice_apply). "
     "When the gate is closed: do nothing — episodic capture already happened."
 )
 
 BEAT_END_GATE_OPEN = (
     "**Lattice gate open** — durable memory update is due this beat. "
-    "Load `lattice-consolidate` (skill tool) → `lattice_packet` → Proposal → `lattice_apply`. "
+    "Load `lattice-consolidate` → `lattice_packet` → `lattice_apply` (patterns) + "
+    "`skill_manage` (procedures). "
     "Once per open gate; do not consolidate on every beat."
 )
 

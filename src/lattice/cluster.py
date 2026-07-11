@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from lattice.contracts.cursor import ConsolidationWatermark
 from lattice.contracts.episodic import RawEpisode
-from lattice.domain.packet import HintKind, PacketHint
+from lattice.domain.packet import HabitHintAction, HintKind, PacketHint
 
 
 def gate_open(
@@ -60,7 +60,11 @@ def build_hints(
     *,
     min_cluster: int = 2,
 ) -> tuple[PacketHint, ...]:
-    """Deterministic hints from clusters large enough to consolidate."""
+    """Deterministic hints from clusters large enough to consolidate.
+
+    Habit hints are EVOLVE-first (Hermes preference ladder): they never invent
+    CREATE slugs from file prefixes. Agents patch an existing role skill.
+    """
     hints: list[PacketHint] = []
     for group in clusters:
         if len(group) < min_cluster:
@@ -72,22 +76,22 @@ def build_hints(
             hints.append(
                 PacketHint(
                     kind=HintKind.HABIT,
-                    key_template=_habit_slug(group),
+                    key_template=template,
                     run_ids=run_ids,
+                    suggested_action=HabitHintAction.EVOLVE,
+                    suggested_skill=None,
                 )
             )
     return tuple(hints)
 
 
 def _cluster_eligible_for_habit(cluster: tuple[RawEpisode, ...]) -> bool:
-    """Habits require recurring done beats — stricter than patterns."""
+    """Habits require recurring done beats — stricter than patterns.
+
+    Hints always suggest EVOLVE (patch an existing role skill). CREATE is never
+    auto-suggested from file prefixes (Hermes #12812).
+    """
     return len(cluster) >= 2 and all(ep.outcome == "done" for ep in cluster)
-
-
-def _habit_slug(cluster: tuple[RawEpisode, ...]) -> str:
-    """Suggest an overlay slug from cluster features."""
-    template = _bucket_key(cluster[0])
-    return template.replace(".", "-").replace("_", "-")
 
 
 def _bucket_key(ep: RawEpisode) -> str:

@@ -15,6 +15,13 @@ class HintKind(StrEnum):
     HABIT = "habit"
 
 
+class HabitHintAction(StrEnum):
+    """Hermes preference: EVOLVE umbrella first; CREATE only for new class-level skills."""
+
+    EVOLVE = "evolve"
+    CREATE = "create"
+
+
 @dataclass(frozen=True)
 class PacketHint:
     """Optional cluster hint for the agent — not a write by itself."""
@@ -22,6 +29,8 @@ class PacketHint:
     kind: HintKind
     key_template: str
     run_ids: tuple[str, ...]
+    suggested_action: HabitHintAction | None = None
+    suggested_skill: str | None = None
 
 
 @dataclass(frozen=True)

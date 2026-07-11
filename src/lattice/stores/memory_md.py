@@ -20,6 +20,11 @@ class MemoryMdStore:
         self._root = Path(root)
         self._root.mkdir(parents=True, exist_ok=True)
 
+    @property
+    def root(self) -> Path:
+        """Consolidated store root — used to discover evolved-skills overlays."""
+        return self._root
+
     def list_active(self, employee_id: str) -> tuple[Atom, ...]:
         atoms = self._read_all(employee_id)
         active = [atom for atom in atoms if atom.invalid_at is None]
