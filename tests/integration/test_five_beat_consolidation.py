@@ -38,7 +38,7 @@ def test_five_beat_golden_path(tmp_path: Path) -> None:
 
     result = sim.lattice.apply(proposal)
     assert result.ok is True
-    assert result.patterns_written == 1
+    assert result.atoms_written == 1
 
     semantic_file = tmp_path / "e_be_1" / "semantic" / "api__retry.json"
     assert semantic_file.exists()

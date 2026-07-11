@@ -38,7 +38,7 @@ def test_rejects_too_many_patterns(tmp_path: Path) -> None:
     )
     result = lattice.validate(Proposal(employee_id="e_be_1", patterns=patterns))
     assert result.ok is False
-    assert any("exceeds max patterns" in e for e in result.errors)
+    assert any("exceeds max items" in e for e in result.errors)
 
 
 def test_rejects_empty_source_run_ids(tmp_path: Path) -> None:

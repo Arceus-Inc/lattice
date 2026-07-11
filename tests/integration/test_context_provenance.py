@@ -35,7 +35,7 @@ def test_beat_start_teaser_with_patterns(tmp_path: Path) -> None:
     sim.lattice.apply(valid_retry_proposal())
 
     teaser = sim.lattice.beat_start_teaser("e_be_1", "retry policy")
-    assert "**Distilled patterns:**" in teaser
+    assert "**Distilled memory:**" in teaser
     assert "api.retry" in teaser
     assert len(teaser) <= 400
 

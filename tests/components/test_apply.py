@@ -51,7 +51,7 @@ def test_apply_assert_writes_atom(tmp_path: Path) -> None:
         episodes_by_run_id=episodes,
     )
     assert result.ok is True
-    assert result.patterns_written == 1
+    assert result.atoms_written == 1
     active = atoms.list_active("e1")
     assert len(active) == 1
     assert active[0].key == "api.retry"

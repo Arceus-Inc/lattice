@@ -1,16 +1,25 @@
-"""Consolidation packet — ranked engrams plus deterministic pattern hints."""
+"""Consolidation packet — ranked engrams plus deterministic hints."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 from lattice.contracts.episodic import RawEpisode
 
 
+class HintKind(StrEnum):
+    """What kind of consolidation the cluster suggests."""
+
+    PATTERN = "pattern"
+    HABIT = "habit"
+
+
 @dataclass(frozen=True)
 class PacketHint:
-    """Optional cluster hint — suggests a pattern key namespace."""
+    """Optional cluster hint for the agent — not a write by itself."""
 
+    kind: HintKind
     key_template: str
     run_ids: tuple[str, ...]
 

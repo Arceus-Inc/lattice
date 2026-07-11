@@ -52,7 +52,7 @@ def test_packet_and_apply_round_trip(tmp_path: Path) -> None:
     packet = lattice.packet("e1")
     assert packet is not None
     assert len(packet.engrams) == 2
-    assert len(packet.hints) == 1
+    assert len(packet.hints) == 2
 
     proposal = Proposal(
         employee_id="e1",
@@ -69,7 +69,7 @@ def test_packet_and_apply_round_trip(tmp_path: Path) -> None:
 
     result = lattice.apply(proposal)
     assert result.ok is True
-    assert result.patterns_written == 1
+    assert result.atoms_written == 1
     context = lattice.context("e1", "retry api")
     assert "api.retry" in context
 

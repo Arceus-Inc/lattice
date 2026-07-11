@@ -1,27 +1,34 @@
 ---
 name: lattice-consolidate
-description: Promote recurring beat evidence into lattice patterns (semantic facts). Use ONLY at beat end when the gate is open — never every beat.
-when_to_use: Beat end ONLY, when the beat-end notice says "Lattice gate open". Skip when gate is closed.
+description: Promote recurring beat evidence into lattice patterns (facts) and habits (skill overlays). Use ONLY at beat end when the gate is open — never every beat.
+when_to_use: Beat end ONLY, when the harness beat-end notice says "Lattice gate open". Do not run on every beat — consolidation is expensive. Skip entirely when the gate is closed.
 ---
 
-# lattice consolidate — patterns only (gate-gated)
+# lattice consolidate — patterns + habits (gate-gated)
 
-Turn **recurring episodic evidence** into **durable patterns** (key/value facts). Expensive — only when gate opens.
+Consolidation turns **recurring episodic evidence** into:
+
+- **Patterns** — declarative facts (`api.retry`, `deploy.order`)
+- **Habits** — procedural playbooks (evolve an existing skill or create a new overlay)
+
+It is expensive. The gate ensures it runs only after enough new beats accumulate.
 
 ## Gate
 
-1. **≥ N new beats** since last consolidation (default 5)
-2. **Cluster** of ≥ K beats share file prefix or intent (default 2)
+1. **≥ N new beats** since last consolidation (default N = 5)
+2. **A cluster** of ≥ K beats share the same file prefix or intent (default K = 2)
 
-Silent beat-end notice → gate closed → do nothing.
+Silent beat-end notice → gate **closed** → do nothing.
 
-## Workflow
+## Workflow (gate open only)
 
-### 1. Packet
+### 1. Fetch the packet
 
 ```
 lattice_packet()
 ```
+
+Returns engrams plus hints tagged `pattern` or `habit`.
 
 ### 2. Re-read evidence
 
@@ -34,7 +41,7 @@ get_run(run_id='run_a57d754d…')
 
 `recall()` returns **slim hits** (summary, intent snippet, files). `get_run(run_id)` returns **full beat prose** — call it for every `source_run_id` you cite in the proposal.
 
-### 3. Proposal JSON
+### 3. Author Proposal JSON
 
 ```json
 {
@@ -46,16 +53,37 @@ get_run(run_id='run_a57d754d…')
       "source_run_ids": ["r_done_1", "r_done_2"],
       "supersedes": null
     }
+  ],
+  "habits": [
+    {
+      "action": "evolve",
+      "skill": "structuring-any-service",
+      "section": "Scale the layering",
+      "body": "Split when a module exceeds ~200 lines…",
+      "source_run_ids": ["r_done_1", "r_done_2"]
+    },
+    {
+      "action": "create",
+      "slug": "retry-discipline",
+      "title": "Retry discipline for HTTP clients",
+      "body": "# Retry discipline\n\nAlways recall the failure shape before patching.",
+      "source_run_ids": ["r_done_2"]
+    }
   ]
 }
 ```
 
-| field | use |
+| Construct | use when |
 |---|---|
+| `patterns[]` | durable **what is true** — cite recurring cluster |
 | `key` | hierarchical lowercase `api.retry` |
-| `claim` | 2–3 short sentences in plain English: what we decided, when it applies, where it lives (min ~20 chars) |
-| `source_run_ids` | every cited beat — rendered at retrieval; drill down with `get_run(run_id)` |
+| `claim` | 2–3 short sentences in plain English (min ~20 chars) |
+| `source_run_ids` | every cited beat — drill down with `get_run(run_id)` |
 | `supersedes` | set when replacing an active pattern key |
+| `habits evolve` | patch a section of an existing skill overlay |
+| `habits create` | new overlay skill (slug must not collide with canonical role skills) |
+
+Habits require ≥1 cited engram with `outcome=done`.
 
 ### Claim style — write like clear documentation
 
@@ -77,11 +105,18 @@ Patterns stay small; episodic prose stays in chorus. Cite real `source_run_ids` 
 ### 4. Apply
 
 ```
-lattice_apply(proposal=<json>)
+lattice_apply(proposal=<json above>)
 ```
 
-≤10 patterns per proposal. No verbatim episodic prose.
+Prefer ≤10 total patterns + habits combined.
+
+## When NOT to consolidate
+
+- Gate closed (most beats)
+- Mid-beat
+- Verbatim episodic prose — patterns must be shorter; habits must be actionable
 
 ## After apply
 
-Next beat: `lattice_context(query)` surfaces patterns with `src:` run ids — `get_run(run_id)` for full beat prose (or `recall(query)` to search first).
+- Patterns surface via `lattice_context` with `src:` run ids — `get_run(run_id)` for full beat prose
+- Habits surface via `skill` tool on next beat (evolved-skills overlay)

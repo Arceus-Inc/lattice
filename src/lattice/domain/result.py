@@ -15,11 +15,12 @@ class ValidationResult:
 
 @dataclass(frozen=True)
 class ApplyResult:
-    """Outcome of applying a validated pattern proposal."""
+    """Outcome of applying a validated proposal."""
 
     employee_id: str
-    patterns_applied: int = 0
-    patterns_written: int = 0
+    ops_applied: int = 0
+    atoms_written: int = 0
+    patches_written: int = 0
     errors: tuple[str, ...] = field(default_factory=tuple)
 
     @property

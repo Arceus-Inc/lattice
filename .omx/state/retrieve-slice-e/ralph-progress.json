@@ -1,0 +1,17 @@
+{
+  "plan": ".omx/plans/prd-retrieve-slice-e-bm25.md",
+  "context": ".omx/context/retrieve-slice-e-bm25-20260710T130500Z.md",
+  "phase": "complete",
+  "stories": [
+    {"id": "US-001", "title": "rank-bm25 dep + helpers", "passes": true},
+    {"id": "US-002", "title": "BM25 score/top_k wiring", "passes": true},
+    {"id": "US-003", "title": "tests + regression", "passes": true}
+  ],
+  "verification": {
+    "lattice_pytest": "75 passed",
+    "retrieve_tests": "15 passed",
+    "architect": "APPROVED (inline)",
+    "deslop": "no changes needed"
+  },
+  "completed_at": "2026-07-10T13:10:00Z"
+}

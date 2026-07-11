@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from lattice.cluster import build_hints, cluster, gate_open, rank
 from lattice.contracts.cursor import ConsolidationWatermark
 from lattice.contracts.episodic import RawEpisode
+from lattice.domain.packet import HintKind
 
 
 def _episode(
@@ -56,7 +57,7 @@ def test_gate_requires_cluster_size() -> None:
     assert gate_open(pair, watermark, min_new=1, min_cluster=2) is True
 
 
-def test_cluster_and_pattern_hints() -> None:
+def test_cluster_and_hints_share_file_prefix() -> None:
     episodes = (
         _episode("r1", files=("src/a.py",)),
         _episode("r2", files=("src/b.py",)),
@@ -65,5 +66,7 @@ def test_cluster_and_pattern_hints() -> None:
     groups = cluster(episodes)
     assert len(groups) == 2
     hints = build_hints(groups, min_cluster=2)
-    assert len(hints) == 1
-    assert hints[0].key_template == "src"
+    assert len(hints) == 2
+    assert {hint.kind for hint in hints} == {HintKind.PATTERN, HintKind.HABIT}
+    pattern_hints = [hint for hint in hints if hint.kind is HintKind.PATTERN]
+    assert pattern_hints[0].key_template == "src"

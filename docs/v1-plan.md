@@ -1,6 +1,6 @@
 # lattice v1 — design spec
 
-**Status:** `feat/patterns-only` · semantic **patterns** in scope · **habits** deferred (live on `main`).
+**Status:** `feat/patterns-habits` · semantic **patterns** + procedural **habits** (skill evolution) in scope.
 
 **Companion:** [consolidation-adjudication-design.md](consolidation-adjudication-design.md) — outcome-grounded Beta–Bernoulli adjudication layer (draft).
 
@@ -18,7 +18,7 @@ Episodic memory (full beat prose) is cheap to append but expensive to re-read ev
 2. **Creation** — write those facts with provenance
 3. **Retrieval** — pull the right facts at beat-start without re-scanning all history
 
-Patterns are the semantic-memory construct for (1–3). Habits (procedural skill evolution) are additive on `main` and merge after patterns are proven.
+Patterns are the semantic-memory construct for (1–3). Habits (procedural skill evolution) are in scope on this branch alongside proven pattern retrieval.
 
 ---
 

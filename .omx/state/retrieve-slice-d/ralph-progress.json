@@ -1,0 +1,18 @@
+{
+  "plan": ".omx/plans/prd-retrieve-slice-d-domain-gate.md",
+  "context": ".omx/context/retrieve-slice-d-20260710T123000Z.md",
+  "phase": "complete",
+  "stories": [
+    {"id": "US-001", "title": "Atom key_files + apply + serde", "passes": true},
+    {"id": "US-002", "title": "retrieve eligible + trust scoring", "passes": true},
+    {"id": "US-003", "title": "integration tests + probe check", "passes": true}
+  ],
+  "verification": {
+    "lattice_pytest": "69 passed",
+    "chorus_harness_pytest": "22 passed",
+    "targeted_retrieve_tests": "15 passed",
+    "architect": "APPROVED (inline review — subagent unavailable)",
+    "deslop": "no changes needed — scoped files already minimal"
+  },
+  "completed_at": "2026-07-10T12:45:00Z"
+}
