@@ -24,9 +24,9 @@
 | Habit *gates* (diary reject, EVOLVE-first, body floors) | Lattice | `validate.py` / `HabitDraft` used by SkillManager |
 | Recurrence gate | Lattice | `gate_open(N, K)` → beat-end teaser |
 
-This matches Hermes’ sticky-note vs reference-manual rule ([Working with Skills](https://hermes-agent.nousresearch.com/docs/guides/work-with-skills)): facts → memory/patterns; procedures → skills. It also matches the Jul 11 correction in `docs/skill-manager-harness-plan.md`: **do not dual-write** `lattice_apply(habits)` + `skill_manage`; do **not** put skill version rows in Lattice SQLite.
+This matches Hermes’ sticky-note vs reference-manual rule ([Working with Skills](https://hermes-agent.nousresearch.com/docs/guides/work-with-skills)): facts → memory/patterns; procedures → skills. It also matches the Jul 11 correction in `docs/plans/skill-manager-harness-plan.md`: **do not dual-write** `lattice_apply(habits)` + `skill_manage`; do **not** put skill version rows in Lattice SQLite.
 
-### 1.2 Cross-repo seam (from `docs/integration-plan.md`)
+### 1.2 Cross-repo seam (from `docs/plans/integration-plan.md`)
 
 Non-negotiable rules still hold:
 
@@ -126,7 +126,7 @@ No GitHub Actions runs were listed for these lattice branches at query time — 
 
 **Do not** merge patterns-only *after* habits without resetting — habits already contains it.
 
-**Doc hygiene before merge:** `docs/chorus-skill-evolution-plan.md` still describes older Slice A–D (`habits[]` on `lattice_apply`, overlay materialize). Current code + `skill-manager-harness-plan.md` supersede that. Either update the evolution plan or mark it historical so reviewers are not confused.
+**Doc hygiene before merge:** `docs/plans/chorus-skill-evolution-plan.md` is marked historical (still describes older Slice A–D). Current code + `docs/plans/skill-manager-harness-plan.md` supersede that.
 
 ---
 
@@ -205,7 +205,7 @@ Paperclip’s GitHub SHA pins differ from Chorus’s revision rows, but the **DB
 
 1. Lattice branches `main`, `feat/patterns-only`, `feat/patterns-habits` — ancestry + dry-run merges (2026-07-12)
 2. [lattice#3](https://github.com/Arceus-Inc/lattice/pull/3), [lattice#1](https://github.com/Arceus-Inc/lattice/pull/1), [chorus#64](https://github.com/Arceus-Inc/chorus/pull/64)
-3. `docs/integration-plan.md`, `docs/skill-manager-harness-plan.md`, `docs/chorus-skill-evolution-plan.md`
+3. `docs/plans/integration-plan.md`, `docs/plans/skill-manager-harness-plan.md`, `docs/plans/chorus-skill-evolution-plan.md`
 4. Chorus reports: `backend-engineer-skill-evolve-e2e.json`, `skill-evolve-proof/`
 
 ### External

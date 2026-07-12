@@ -1,7 +1,7 @@
 # Skill Manager Harness Plan
 
 *Lattice × Chorus · Hermes process + Paperclip versioning · Harness-first*  
-*Generated: July 11, 2026 · Builds on [chorus-skill-evolution-plan.md](./chorus-skill-evolution-plan.md), [hermes-skill-granularity-research.md](./hermes-skill-granularity-research.md), live scans of [hermes-agent](https://github.com/nousresearch/hermes-agent) + [paperclip](https://github.com/paperclipai/paperclip)*
+*Generated: July 11, 2026 · Builds on [chorus-skill-evolution-plan.md](./chorus-skill-evolution-plan.md), [hermes-skill-granularity-research.md](../research/hermes-skill-granularity-research.md), live scans of [hermes-agent](https://github.com/nousresearch/hermes-agent) + [paperclip](https://github.com/paperclipai/paperclip)*
 
 ---
 

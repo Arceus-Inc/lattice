@@ -1,6 +1,6 @@
 # Consolidation system — lattice × chorus integration plan
 
-**Branch:** `feat/patterns-only` · **Companion:** [v1-plan.md](v1-plan.md) · [consolidation-adjudication-design.md](consolidation-adjudication-design.md)
+**Branch:** `feat/patterns-habits` · **Companion:** [v1-plan.md](v1-plan.md) · [consolidation-adjudication-design.md](consolidation-adjudication-design.md)
 
 > *Episodic memory is the hippocampus — fast, verbatim, forgetful unless replayed.*  
 > *Pattern memory is cortex — slow to form, compact, durable.*  
@@ -450,7 +450,7 @@ Retrieval output (lattice):
 | Doc | Repo |
 |---|---|
 | [v1-plan.md](v1-plan.md) | lattice — pattern algebra |
-| [patterns-only.md](patterns-only.md) | lattice — branch scope |
+| [skill-manager-harness-plan.md](skill-manager-harness-plan.md) | lattice × chorus procedural ownership |
 | `docs/specs/divo/07-memory.md` | chorus — memory seam |
 | `docs/superpowers/specs/2026-07-08-episodic-per-agent-record-design.md` | chorus — episodic + recall |
 | `chorus_employee/_lattice_skills/` | chorus — `lattice-context` / `lattice-consolidate` playbooks |

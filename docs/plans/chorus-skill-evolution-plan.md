@@ -1,6 +1,10 @@
 # Chorus × Lattice Skill Evolution: Integrable Plan
 
-*Generated: July 11, 2026 | Updated: July 11, 2026 (Hermes granularity) | Builds on [procedural-memory-research.md](./procedural-memory-research.md), [hermes-skill-granularity-research.md](./hermes-skill-granularity-research.md) | Confidence: High*
+> **Historical (Jul 11).** Slices A–D below still describe `habits[]` on `lattice_apply` and overlay materialize.  
+> **Current ownership:** Chorus `skill_manage` + `SkillStore` is the sole procedural writer; Lattice validates habit drafts only.  
+> See [skill-manager-harness-plan.md](./skill-manager-harness-plan.md).
+
+*Generated: July 11, 2026 | Updated: July 11, 2026 (Hermes granularity) | Builds on [procedural-memory-research.md](../research/procedural-memory-research.md), [hermes-skill-granularity-research.md](../research/hermes-skill-granularity-research.md) | Confidence: High*
 
 ## Executive Summary
 
@@ -23,7 +27,7 @@ Routing follows Hermes + agentskills.io:
 | Class-level new playbooks (rare) | **Habit CREATE** | `skill` |
 | Session diary / one-off observations | **Episodic only** | `recall`, `get_run` — never promote |
 
-**Critical rule** ([Hermes #12812](https://github.com/NousResearch/hermes-agent/issues/12812)): short sticky-note content must **not** become skills. Default habit action is **EVOLVE** (patch umbrella), not CREATE micro-slugs. See [hermes-skill-granularity-research.md](./hermes-skill-granularity-research.md).
+**Critical rule** ([Hermes #12812](https://github.com/NousResearch/hermes-agent/issues/12812)): short sticky-note content must **not** become skills. Default habit action is **EVOLVE** (patch umbrella), not CREATE micro-slugs. See [hermes-skill-granularity-research.md](../research/hermes-skill-granularity-research.md).
 
 ---
 
@@ -441,4 +445,4 @@ M3 done when:
 
 ## Methodology
 
-Chorus integration audit + [procedural-memory-research.md](./procedural-memory-research.md) + [hermes-skill-granularity-research.md](./hermes-skill-granularity-research.md). Plan revised after Hermes #12812 / background_review preference ladder: **EVOLVE-first, CREATE-rare, patterns-for-facts**.
+Chorus integration audit + [procedural-memory-research.md](../research/procedural-memory-research.md) + [hermes-skill-granularity-research.md](../research/hermes-skill-granularity-research.md). Plan revised after Hermes #12812 / background_review preference ladder: **EVOLVE-first, CREATE-rare, patterns-for-facts**.

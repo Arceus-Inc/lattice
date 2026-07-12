@@ -1,4 +1,8 @@
-"""Default procedural store — evolved SKILL.md overlays."""
+"""Default procedural store — evolved SKILL.md overlays.
+
+Legacy / test path: Chorus ``skill_manage`` + SkillStore is the production SoT for
+procedural memory. Keep this store for unit tests and optional ``enable_patches`` demos.
+"""
 
 from __future__ import annotations
 

@@ -464,4 +464,4 @@ if lattice.gate_open("e_be_1"):
 context = lattice.context("e_be_1", "retry policy")
 ```
 
-See also: [`patterns-only.md`](patterns-only.md) for branch scope vs `main`.
+See also: [skill-manager-harness-plan.md](skill-manager-harness-plan.md) for procedural ownership (Chorus `skill_manage`).

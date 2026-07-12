@@ -1,28 +1,18 @@
 # lattice
 
-**The consolidation layer — episodic traces → patterns (facts) + habits (skills).**
+**The consolidation layer — episodic traces → durable patterns (facts), with habit *validation* for Chorus skill evolution.**
 
 > `dream` completes one task · `chorus` runs the org · **`lattice` validates and stores what agents propose.**
 
-lattice is an SDK sibling to horizon. It reads chorus's append-only episodic stream, ranks evidence, and applies agent-authored proposals:
-
-| Layer | Priority | Output |
+| Layer | Owner | Output |
 |---|---|---|
-| **Patterns (P0)** | semantic facts | `MEMORY.md` view + `semantic/*.json` |
-| **Habits (P1)** | procedural playbooks | `evolved-skills/<slug>/SKILL.md` overlays |
+| **Patterns** | Lattice | `MEMORY.md` + `semantic/*.json` |
+| **Procedures** | Chorus `skill_manage` / SkillStore | Versioned skills rematerialized into `.harness/skills/` |
+| **Habit gates** | Lattice `validate.py` | EVOLVE-first, diary reject, CREATE rarity |
 
-chorus owns WRITE / STORE / `recall()` pull. The agent authors proposals. lattice owns RANK / validate / apply / context.
+Agent playbooks (`lattice-context`, `lattice-consolidate`) live in **chorus** at `chorus_employee/_lattice_skills/`. Lattice keeps brief directives only (`lattice.directive`).
 
-See [`docs/v1-plan.md`](docs/v1-plan.md). Agent playbooks (`lattice-context`, `lattice-consolidate`) live in **chorus** at `chorus_employee/_lattice_skills/` — materialize with role skills. Lattice keeps brief directives only (`lattice.directive`).
-
-## Employee skills (chorus-owned)
-
-| Skill | When | Location |
-|---|---|---|
-| `lattice-context` | Beat-start — patterns via `lattice_context` vs `recall` | `chorus_employee/_lattice_skills/` |
-| `lattice-consolidate` | Beat-end — **only** when gate is open (default: ≥5 new beats + cluster) | `chorus_employee/_lattice_skills/` |
-
-Brief directives for chorus wiring: `lattice.directive.LATTICE_CONTEXT_DIRECTIVE`, `LATTICE_CONSOLIDATE_DIRECTIVE`.
+Docs index: [`docs/README.md`](docs/README.md) · start with [`docs/plans/v1-plan.md`](docs/plans/v1-plan.md).
 
 ## Quickstart
 
@@ -33,9 +23,9 @@ uv run pytest -q
 
 ```python
 from lattice.compose import build_default
-from lattice.domain import HabitAction, HabitDraft, PatternDraft, Proposal
+from lattice.domain import PatternDraft, Proposal
 
-lattice = build_default(consolidated_root=".lattice", episodes=episodic_reader, enable_patches=True)
+lattice = build_default(consolidated_root=".lattice", episodes=episodic_reader)
 if lattice.gate_open("e_be_1"):
     packet = lattice.packet("e_be_1")
     result = lattice.apply(
@@ -45,15 +35,6 @@ if lattice.gate_open("e_be_1"):
                 PatternDraft(
                     key="api.retry",
                     claim="HTTP client retries use exponential backoff capped at 30s",
-                    source_run_ids=("r1",),
-                ),
-            ),
-            habits=(
-                HabitDraft(
-                    action=HabitAction.CREATE,
-                    slug="retry-discipline",
-                    title="Retry discipline",
-                    body="# Retry discipline\n\n…",
                     source_run_ids=("r1",),
                 ),
             ),
@@ -68,14 +49,27 @@ context = lattice.context("e_be_1", "retry policy")
 src/lattice/
   contracts/      ports (EpisodicReader, AtomStore, PatchStore, …)
   domain/         PatternDraft, HabitDraft, Proposal, Packet
-  compile.py      patterns/habits → internal ops
   cluster.py      gate, rank, cluster, packet hints
-  validate.py     deterministic proposal rules
-  apply.py        transactional writes
+  compile.py      patterns/habits → internal ops
+  validate.py     deterministic proposal + habit gates
+  apply.py        transactional atom (and optional overlay) writes
   retrieve.py     score + context markdown
-  stores/         MemoryMdStore, OverlaySkillStore, JsonCursorStore
-  facade.py       Lattice (5 functions)
+  adjudicate.py   sleep-beat tiers / LCB helpers
+  forget.py       decay / prune helpers
+  stores/         MemoryMdStore, JsonCursorStore, OverlaySkillStore (legacy/tests)
+  directive.py    harness brief snippets
+  facade.py       Lattice public API
   compose.py      build_default()
+
+tests/
+  unit/           fast module tests
+  components/     store / apply / retrieve components
+  integration/    end-to-end seam scenarios
+
+docs/
+  plans/          product + integration plans
+  research/       background research
+  assets/         diagrams
 ```
 
 ## Seam

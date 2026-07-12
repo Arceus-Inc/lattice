@@ -1,6 +1,6 @@
 """Deterministic proposal validation — no LLM.
 
-Hermes-aligned habit gates (see docs/hermes-skill-granularity-research.md):
+Hermes-aligned habit gates (see docs/research/hermes-skill-granularity-research.md):
 - Facts belong in patterns[]; sticky-note / diary content is rejected as habits.
 - EVOLVE (patch existing umbrella) is the default path; CREATE is rare and strict.
 """

@@ -1,6 +1,6 @@
 # Lattice E2E Testing Scenarios
 
-**Branch:** `feat/patterns-only` · **Companion:** [integration-plan.md](integration-plan.md), [v1-plan.md](v1-plan.md)
+**Branch:** `feat/patterns-habits` · **Companion:** [integration-plan.md](integration-plan.md), [v1-plan.md](v1-plan.md)
 
 Lattice is a Python SDK — there is no browser UI. **E2E** here means end-to-end **memory lifecycle** tests: episodic append → gate → packet → proposal → apply → context → recall drill-down. Tests are layered by seam depth.
 
