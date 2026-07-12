@@ -183,7 +183,7 @@ sequenceDiagram
 | `RECALL_DIRECTIVE` | `chorus_employee/_recall.py` | exists |
 | `LATTICE_CONTEXT_DIRECTIVE` | `lattice.directive` | 3 lines |
 | Pattern teaser | `lattice.beat_start_teaser(employee, task.intent)` | ~400 chars |
-| Lattice skills | merge `lattice/skills/` into `.harness/skills/` | read-only |
+| Lattice skills | merge `chorus_employee/_lattice_skills/` into `.harness/skills/` | read-only (chorus-owned) |
 
 **Neuroscience:** pattern completion — surface relevant cortical traces before encoding new episodic content.
 
@@ -306,7 +306,7 @@ Optional: role-specific one-liner in `_brief.py` only when needed.
 ```python
 def _materialize_all_skills(root: Path, role_skills: Path, lattice_skills: Path) -> Path:
     dest = root / ".harness" / "skills"
-    # copy role bundle + lattice bundle (lattice-context, lattice-consolidate)
+    # copy role bundle + chorus `_lattice_skills/` (lattice-context, lattice-consolidate)
     ...
 ```
 
@@ -453,7 +453,7 @@ Retrieval output (lattice):
 | [patterns-only.md](patterns-only.md) | lattice — branch scope |
 | `docs/specs/divo/07-memory.md` | chorus — memory seam |
 | `docs/superpowers/specs/2026-07-08-episodic-per-agent-record-design.md` | chorus — episodic + recall |
-| `skills/lattice-context/`, `skills/lattice-consolidate/` | lattice — agent playbooks |
+| `chorus_employee/_lattice_skills/` | chorus — `lattice-context` / `lattice-consolidate` playbooks |
 | `dream/contracts/hook.py` | dream — hook events |
 
 ---

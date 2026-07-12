@@ -13,14 +13,14 @@ lattice is an SDK sibling to horizon. It reads chorus's append-only episodic str
 
 chorus owns WRITE / STORE / `recall()` pull. The agent authors proposals. lattice owns RANK / validate / apply / context.
 
-See [`docs/v1-plan.md`](docs/v1-plan.md). Employee skills live in [`skills/`](skills/) — materialize alongside role skills so agents know **when** to call lattice tools (consolidation only after N beats when the gate opens, not every beat end).
+See [`docs/v1-plan.md`](docs/v1-plan.md). Agent playbooks (`lattice-context`, `lattice-consolidate`) live in **chorus** at `chorus_employee/_lattice_skills/` — materialize with role skills. Lattice keeps brief directives only (`lattice.directive`).
 
-## Employee skills
+## Employee skills (chorus-owned)
 
-| Skill | When |
-|---|---|
-| `lattice-context` | Beat-start — patterns via `lattice_context` vs `recall` vs habits via `skill` |
-| `lattice-consolidate` | Beat-end — **only** when gate is open (default: ≥5 new beats + cluster) |
+| Skill | When | Location |
+|---|---|---|
+| `lattice-context` | Beat-start — patterns via `lattice_context` vs `recall` | `chorus_employee/_lattice_skills/` |
+| `lattice-consolidate` | Beat-end — **only** when gate is open (default: ≥5 new beats + cluster) | `chorus_employee/_lattice_skills/` |
 
 Brief directives for chorus wiring: `lattice.directive.LATTICE_CONTEXT_DIRECTIVE`, `LATTICE_CONSOLIDATE_DIRECTIVE`.
 

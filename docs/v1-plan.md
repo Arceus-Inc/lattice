@@ -338,7 +338,7 @@ Default: consolidate roughly every **5 beats** when a **recurring cluster** exis
 
 ## 11. Agent skills & tools
 
-Materialize `skills/` into `.harness/skills/` (same as role skills).
+Materialize chorus `chorus_employee/_lattice_skills/` into `.harness/skills/` (same as role skills). Lattice does not ship SKILL.md copies.
 
 | Skill | Tools | When |
 |---|---|---|
@@ -382,9 +382,9 @@ src/lattice/
   compose.py       build_default()
 examples/
   chorus_bridge.py composition-root adapter (only chorus import)
-skills/
-  lattice-context/ lattice-consolidate/
 ```
+
+Agent skills: `chorus_employee/_lattice_skills/` (chorus), not this repo.
 
 ---
 

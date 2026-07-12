@@ -240,7 +240,7 @@ Add:
 - CREATE example only as **class-level** template (800+ chars, required sections)
 - Explicit: retry policy numbers → `patterns[]` only
 
-Sync `lattice/skills/lattice-consolidate/SKILL.md` from chorus copy.
+Lattice does not keep a duplicate SKILL.md — chorus `_lattice_skills/` is authoritative.
 
 Update `_lattice.py` `LatticeApplyInput` description.
 
@@ -435,7 +435,6 @@ M3 done when:
 | `src/lattice/cluster.py` | C |
 | `src/lattice/directive.py` | C |
 | `src/lattice/stores/overlay_skills.py` | B |
-| `skills/lattice-consolidate/SKILL.md` | D |
 | `tests/test_validate_habits.py` | C (new/extend) |
 
 ---
