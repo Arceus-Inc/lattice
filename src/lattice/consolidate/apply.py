@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from lattice.adjudicate import key_files_from_runs
-from lattice.compile import compile_proposal
+from lattice.consolidate.compile import compile_proposal
 from lattice.contracts.atom import Atom, AtomStore
 from lattice.contracts.episodic import RawEpisode
 from lattice.contracts.patch import PatchStore, SkillDraft, SkillPatch
 from lattice.domain.proposal import OpKind, Proposal
 from lattice.domain.result import ApplyResult, ValidationResult
 from lattice.domain.stats import PatternStats
+from lattice.semantic.adjudicate import key_files_from_runs
 
 
 def apply_proposal(

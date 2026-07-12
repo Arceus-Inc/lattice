@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from lattice.adjudicate import (
+from lattice.semantic.adjudicate import (
     adjudicate_atom,
     apply_episode_to_stats,
     fingerprint_overlap,

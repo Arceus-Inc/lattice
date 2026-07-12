@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from lattice.compile import compile_proposal
+from lattice.consolidate.compile import compile_proposal
 from lattice.compose import build_default
 from lattice.contracts.episodic import RawEpisode
 from lattice.domain.packet import HabitHintAction, HintKind

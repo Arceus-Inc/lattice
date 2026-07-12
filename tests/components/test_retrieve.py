@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from lattice.contracts.atom import Atom
-from lattice.retrieve import render_context, score, top_k
+from lattice.semantic.retrieve import render_context, score, top_k
 
 
 def _atom(key: str, claim: str, *, days_ago: int = 0) -> Atom:

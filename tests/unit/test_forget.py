@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from lattice.contracts.atom import Atom
 from lattice.domain.stats import PatternStats, Tier
-from lattice.forget import discount_stats
+from lattice.semantic.forget import discount_stats
 from tests.integration.conftest import BeatSimulator, make_episode, valid_retry_proposal
 
 

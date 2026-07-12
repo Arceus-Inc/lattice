@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from lattice.cluster import new_episodes
+from lattice.consolidate.cluster import new_episodes
 from lattice.contracts.atom import Atom
 from lattice.contracts.cursor import ConsolidationWatermark
 from lattice.contracts.episodic import RawEpisode

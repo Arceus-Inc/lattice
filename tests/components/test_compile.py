@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from lattice.compile import compile_proposal
+from lattice.consolidate.compile import compile_proposal
 from lattice.domain.proposal import OpKind, PatternDraft, Proposal
 
 

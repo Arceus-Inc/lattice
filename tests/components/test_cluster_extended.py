@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from lattice.cluster import gate_open, new_episodes, rank
+from lattice.consolidate.cluster import gate_open, new_episodes, rank
 from lattice.contracts.cursor import ConsolidationWatermark
 from lattice.contracts.episodic import RawEpisode
 

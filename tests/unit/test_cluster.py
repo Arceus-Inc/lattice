@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from lattice.cluster import build_hints, cluster, gate_open, rank
+from lattice.consolidate.cluster import build_hints, cluster, gate_open, rank
 from lattice.contracts.cursor import ConsolidationWatermark
 from lattice.contracts.episodic import RawEpisode
 from lattice.domain.packet import HintKind

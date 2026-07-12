@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from lattice.contracts.atom import Atom
 from lattice.domain.stats import PatternStats, Tier
-from lattice.retrieve import eligible, render_context, score, top_k
+from lattice.semantic.retrieve import eligible, render_context, score, top_k
 
 
 def _atom(

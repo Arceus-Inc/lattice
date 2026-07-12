@@ -371,13 +371,11 @@ Brief directives (composition root): `LATTICE_CONTEXT_DIRECTIVE`, `LATTICE_CONSO
 src/lattice/
   contracts/       EpisodicReader, AtomStore, ConsolidationCursor
   domain/          PatternDraft, Proposal, Packet, ValidationResult, ApplyResult
-  cluster.py       gate, rank, cluster, build_hints
-  compile.py       PatternDraft → internal ops
-  validate.py      deterministic rules
-  apply.py         atom writes
-  retrieve.py      score + context render (with provenance)
+  consolidate/     cluster, compile, validate, apply
+  semantic/        retrieve, adjudicate, forget
   stores/          MemoryMdStore, JsonCursorStore
-  directive.py     harness brief snippets
+  harness/         directive briefs + beat notices
+  directive.py     compatibility re-export of harness.directive
   facade.py        Lattice (five functions)
   compose.py       build_default()
 examples/

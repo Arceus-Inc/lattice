@@ -47,19 +47,14 @@ context = lattice.context("e_be_1", "retry policy")
 
 ```
 src/lattice/
+  facade.py / compose.py / errors.py   public composition root
   contracts/      ports (EpisodicReader, AtomStore, PatchStore, …)
   domain/         PatternDraft, HabitDraft, Proposal, Packet
-  cluster.py      gate, rank, cluster, packet hints
-  compile.py      patterns/habits → internal ops
-  validate.py     deterministic proposal + habit gates
-  apply.py        transactional atom (and optional overlay) writes
-  retrieve.py     score + context markdown
-  adjudicate.py   sleep-beat tiers / LCB helpers
-  forget.py       decay / prune helpers
   stores/         MemoryMdStore, JsonCursorStore, OverlaySkillStore (legacy/tests)
-  directive.py    harness brief snippets
-  facade.py       Lattice public API
-  compose.py      build_default()
+  consolidate/    cluster → compile → validate → apply
+  semantic/       retrieve, adjudicate, forget
+  harness/        directive briefs + beat notices
+  directive.py    compatibility re-export of harness.directive
 
 tests/
   unit/           fast module tests

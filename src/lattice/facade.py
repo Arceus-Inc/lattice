@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from lattice.apply import apply_proposal
-from lattice.adjudicate import adjudicate_atoms
-from lattice.cluster import build_hints, cluster, gate_open, new_episodes, rank
+from lattice.consolidate.apply import apply_proposal
+from lattice.consolidate.cluster import build_hints, cluster, gate_open, new_episodes, rank
+from lattice.consolidate.validate import validate_proposal
 from lattice.contracts.atom import AtomStore
 from lattice.contracts.cursor import ConsolidationCursor
 from lattice.contracts.episodic import EpisodicReader
@@ -20,9 +20,9 @@ from lattice.directive import (
 from lattice.domain.packet import Packet
 from lattice.domain.proposal import Proposal
 from lattice.domain.result import AdjudicateResult, ApplyResult, ForgetResult, ValidationResult
-from lattice.forget import forget_employee
-from lattice.retrieve import render_context
-from lattice.validate import validate_proposal
+from lattice.semantic.adjudicate import adjudicate_atoms
+from lattice.semantic.forget import forget_employee
+from lattice.semantic.retrieve import render_context
 
 
 class Lattice:

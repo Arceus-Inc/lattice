@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from lattice.apply import apply_proposal
+from lattice.consolidate.apply import apply_proposal
 from lattice.contracts.atom import Atom
 from lattice.domain.proposal import PatternDraft, Proposal
 from lattice.domain.result import ValidationResult
