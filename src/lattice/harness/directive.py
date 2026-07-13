@@ -8,8 +8,8 @@ DEFAULT_MIN_CLUSTER_SIZE = 2
 
 LATTICE_CONTEXT_DIRECTIVE = (
     "Distilled **patterns** live in lattice; raw beats live in episodic memory. "
-    "Procedural playbooks live in versioned skills — load via the `skill` tool / "
-    "`skill_manage(view)`. "
+    "Procedural playbooks live in versioned skills — READ them via the `skill` tool only "
+    "(`skill_manage` is the writer; its `view` is for inspecting a skill before you edit it). "
     "At beat-start, call `lattice_context(query='…')` only when you need durable patterns "
     "for THIS intent — not every beat. "
     "For beat orientation use `recall()` or `recall(query='…')` (slim hits). "
