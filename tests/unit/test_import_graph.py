@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 def test_lattice_package_never_imports_chorus() -> None:
-    root = Path(__file__).resolve().parents[1] / "src" / "lattice"
+    root = Path(__file__).resolve().parents[2] / "src" / "lattice"
     offenders: list[str] = []
     for path in root.rglob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))

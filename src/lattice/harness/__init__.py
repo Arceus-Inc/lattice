@@ -1,4 +1,4 @@
-"""Compatibility re-export — prefer ``lattice.harness.directive`` for new code."""
+"""Harness wiring — brief directives and beat notices for chorus."""
 
 from __future__ import annotations
 

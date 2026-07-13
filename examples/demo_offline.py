@@ -75,7 +75,7 @@ def main() -> None:
         patterns=(
             PatternDraft(
                 key="api.retry",
-                claim="exponential backoff with cap",
+                claim="HTTP client retries use exponential backoff with a 30s cap",
                 source_run_ids=("r_done", "r_done_2"),
             ),
         ),

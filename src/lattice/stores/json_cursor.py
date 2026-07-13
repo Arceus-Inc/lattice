@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from lattice.contracts.cursor import ConsolidationWatermark
+from lattice.stores._safe_path import assert_safe_store_id
 
 
 class JsonCursorStore:
@@ -18,6 +19,7 @@ class JsonCursorStore:
         self._root.mkdir(parents=True, exist_ok=True)
 
     def get(self, employee_id: str) -> ConsolidationWatermark:
+        assert_safe_store_id(employee_id)
         payload = self._load()
         entry = payload.get(employee_id, {})
         consolidated_raw = entry.get("consolidated_at")
@@ -33,6 +35,7 @@ class JsonCursorStore:
         )
 
     def advance(self, employee_id: str, *, last_run_id: str, episodes_seen: int) -> None:
+        assert_safe_store_id(employee_id)
         payload = self._load()
         payload[employee_id] = {
             "last_run_id": last_run_id,

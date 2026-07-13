@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from lattice.compile import compile_proposal
+from lattice.consolidate.compile import compile_proposal
 from lattice.compose import build_default
 from lattice.contracts.episodic import RawEpisode
-from lattice.domain.packet import HintKind
+from lattice.domain.packet import HabitHintAction, HintKind
 from lattice.domain.proposal import HabitAction, HabitDraft, OpKind, PatternDraft, Proposal
 
 
@@ -42,6 +42,38 @@ def _episode(run_id: str) -> RawEpisode:
     )
 
 
+def _evolve_body() -> str:
+    return (
+        "## Before patching HTTP clients\n\n"
+        "1. Call `get_run(run_id)` for each cited beat and recall the failure shape.\n"
+        "2. Classify transient (429/503) versus logic error before editing.\n"
+        "3. Only then edit `src/api/client.py`.\n\n"
+        "## Pitfalls\n"
+        "- Patching without reading prior beat prose repeats the same mistake.\n\n"
+        "## Verification\n"
+        "- `test_evidence` passes after the patch.\n"
+    )
+
+
+def _create_body() -> str:
+    return (
+        "## Overview\n"
+        "Class-level playbook for HTTP client retry work across services.\n"
+        "Use this when the agent must implement durable retry behaviour, not one-off greps.\n\n"
+        "## When to Use\n"
+        "- Implementing or fixing HTTP retry / backoff behaviour.\n"
+        "- Do not use for one-off log greps or billing investigations.\n\n"
+        "## Procedure\n"
+        "1. Recall prior failure shape via `get_run`.\n"
+        "2. Classify transient vs logic error.\n"
+        "3. Patch client, then verify with `test_evidence`.\n\n"
+        "## Pitfalls\n"
+        "- Treating session-specific counts as durable policy.\n\n"
+        "## Verification\n"
+        "- Green `test_evidence` bundle on disk.\n"
+    )
+
+
 def test_compile_pattern_and_habit() -> None:
     proposal = Proposal(
         employee_id="e1",
@@ -49,16 +81,16 @@ def test_compile_pattern_and_habit() -> None:
         habits=(
             HabitDraft(
                 action=HabitAction.EVOLVE,
-                skill="retry-discipline",
+                skill="structuring-any-service",
                 section="Before patching",
-                body="Run recall on the failure shape first.",
+                body=_evolve_body(),
                 source_run_ids=("r1",),
             ),
             HabitDraft(
                 action=HabitAction.CREATE,
-                slug="retry-discipline",
-                title="Retry discipline",
-                body="# Retry discipline\n\nAlways cap backoff.",
+                slug="http-retry-playbook",
+                title="HTTP retry playbook",
+                body=_create_body(),
                 source_run_ids=("r1",),
             ),
         ),
@@ -83,19 +115,22 @@ def test_habit_evolve_and_create(tmp_path: Path) -> None:
         habits=(
             HabitDraft(
                 action=HabitAction.CREATE,
-                slug="retry-discipline",
-                title="Retry discipline",
-                body="# Retry discipline\n\nAlways cap backoff.",
+                slug="http-retry-playbook",
+                title="HTTP retry playbook",
+                body=_create_body(),
                 source_run_ids=("r1", "r2"),
             ),
         ),
     )
     result = lattice.apply(proposal)
-    assert result.ok is True
+    assert result.ok is True, result.errors
     assert result.patches_written == 1
-    skill_path = tmp_path / "e1" / "evolved-skills" / "retry-discipline" / "SKILL.md"
+    skill_path = tmp_path / "e1" / "evolved-skills" / "http-retry-playbook" / "SKILL.md"
     assert skill_path.exists()
-    assert "Retry discipline" in skill_path.read_text(encoding="utf-8")
+    text = skill_path.read_text(encoding="utf-8")
+    assert text.startswith("---")
+    assert "name: http-retry-playbook" in text
+    assert "HTTP retry playbook" in text or "When to Use" in text
 
 
 def test_rejects_canonical_skill_collision(tmp_path: Path) -> None:
@@ -118,7 +153,7 @@ def test_rejects_canonical_skill_collision(tmp_path: Path) -> None:
                 action=HabitAction.CREATE,
                 slug="structuring-any-service",
                 title="Collision",
-                body="nope",
+                body=_create_body(),
                 source_run_ids=("r1",),
             ),
         ),
@@ -141,3 +176,5 @@ def test_packet_emits_pattern_and_habit_hints(tmp_path: Path) -> None:
     kinds = {hint.kind for hint in packet.hints}
     assert HintKind.PATTERN in kinds
     assert HintKind.HABIT in kinds
+    habit_hints = [h for h in packet.hints if h.kind is HintKind.HABIT]
+    assert all(h.suggested_action is HabitHintAction.EVOLVE for h in habit_hints)

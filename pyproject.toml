@@ -24,6 +24,7 @@ dependencies = [
   # a consumer's composition root wires chorus's concrete classes into lattice's ports (spec: no
   # sideways import).
   "dream",
+  "rank-bm25>=0.2.2",
 ]
 
 [project.optional-dependencies]
@@ -54,7 +55,7 @@ chorus = { path = "../chorus", editable = true }
 packages = ["src/lattice", "src/lattice_cli"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/lattice", "src/lattice_cli", "tests", "docs", "examples", "skills", "README.md", "pyproject.toml"]
+include = ["src/lattice", "src/lattice_cli", "tests", "docs", "examples", "README.md", "pyproject.toml"]
 
 [tool.ruff]
 line-length = 100

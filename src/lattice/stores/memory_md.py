@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
 
 from lattice.contracts.atom import Atom
+from lattice.domain.stats import PatternStats, Tier
+from lattice.stores._safe_path import assert_safe_store_id
 
 
 class MemoryMdStore:
@@ -17,6 +19,11 @@ class MemoryMdStore:
     def __init__(self, root: str | Path) -> None:
         self._root = Path(root)
         self._root.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def root(self) -> Path:
+        """Consolidated store root — used to discover evolved-skills overlays."""
+        return self._root
 
     def list_active(self, employee_id: str) -> tuple[Atom, ...]:
         atoms = self._read_all(employee_id)
@@ -49,6 +56,8 @@ class MemoryMdStore:
             created_at=atom.created_at,
             invalid_at=at,
             activation=atom.activation,
+            stats=atom.stats,
+            key_files=atom.key_files,
         )
         path.write_text(json.dumps(_atom_to_json(invalidated), indent=2), encoding="utf-8")
         self._rewrite_memory_md(employee_id)
@@ -64,35 +73,74 @@ class MemoryMdStore:
         return tuple(atoms)
 
     def _employee_dir(self, employee_id: str) -> Path:
-        return self._root / employee_id
+        safe_id = assert_safe_store_id(employee_id)
+        return self._root / safe_id
 
     def _atom_path(self, employee_id: str, key: str) -> Path:
         safe = key.replace(".", "__")
         return self._employee_dir(employee_id) / "semantic" / f"{safe}.json"
 
     def _rewrite_memory_md(self, employee_id: str) -> None:
-        lines = ["# MEMORY", ""]
-        for atom in self.list_active(employee_id):
-            lines.append(f"- **{atom.key}**: {atom.value}")
+        blocks = ["# MEMORY", ""]
+        active = self.list_active(employee_id)
+        for index, atom in enumerate(active):
+            if index > 0:
+                blocks.append("")
+            blocks.append(_format_memory_block(atom))
         memory_md = self._employee_dir(employee_id) / "MEMORY.md"
         memory_md.parent.mkdir(parents=True, exist_ok=True)
-        memory_md.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        memory_md.write_text("\n".join(blocks) + "\n", encoding="utf-8")
+
+
+def _format_memory_block(atom: Atom) -> str:
+    stats = atom.stats or PatternStats.jeffreys_prior()
+    tier_label = stats.tier.value
+    lcb = stats.lcb05
+    header = f"### {atom.key} ({tier_label}, LCB {lcb:.2f})"
+    body = atom.value.strip()
+    return f"{header}\n\n{body}"
+
+
+def _format_memory_line(atom: Atom) -> str:
+    """Compact single-line view — kept for callers that expect the legacy shape."""
+    stats = atom.stats or PatternStats.jeffreys_prior()
+    tier_label = stats.tier.value
+    lcb = stats.lcb05
+    return f"- **{atom.key}** [{tier_label}, LCB {lcb:.2f}]: {atom.value}"
 
 
 def _atom_to_json(atom: Atom) -> dict[str, object]:
-    data = asdict(atom)
-    data["created_at"] = atom.created_at.isoformat()
+    data: dict[str, object] = {
+        "key": atom.key,
+        "value": atom.value,
+        "employee_id": atom.employee_id,
+        "source_run_ids": list(atom.source_run_ids),
+        "created_at": atom.created_at.isoformat(),
+        "activation": atom.activation,
+        "key_files": list(atom.key_files),
+    }
     if atom.invalid_at is not None:
         data["invalid_at"] = atom.invalid_at.isoformat()
-    else:
-        data.pop("invalid_at", None)
+    if atom.stats is not None:
+        data["stats"] = _stats_to_json(atom.stats)
     return data
+
+
+def _stats_to_json(stats: PatternStats) -> dict[str, object]:
+    return {
+        "alpha_own": stats.alpha_own,
+        "beta_own": stats.beta_own,
+        "tier": stats.tier.value,
+    }
 
 
 def _atom_from_json(payload: dict[str, Any]) -> Atom:
     invalid_raw = payload.get("invalid_at")
     invalid_at = datetime.fromisoformat(str(invalid_raw)) if invalid_raw else None
     source_ids = payload.get("source_run_ids", ())
+    key_files_raw = payload.get("key_files", ())
+    stats_raw = payload.get("stats")
+    stats = _stats_from_json(cast(dict[str, Any], stats_raw)) if isinstance(stats_raw, dict) else None
     return Atom(
         key=str(payload["key"]),
         value=str(payload["value"]),
@@ -101,4 +149,16 @@ def _atom_from_json(payload: dict[str, Any]) -> Atom:
         created_at=datetime.fromisoformat(str(payload["created_at"])),
         invalid_at=invalid_at,
         activation=float(payload.get("activation", 1.0)),
+        stats=stats,
+        key_files=tuple(str(item) for item in cast(tuple[object, ...], key_files_raw)),
+    )
+
+
+def _stats_from_json(payload: dict[str, Any]) -> PatternStats:
+    tier_raw = str(payload.get("tier", Tier.HINT.value))
+    tier = Tier.RULE if tier_raw == Tier.RULE.value else Tier.HINT
+    return PatternStats(
+        alpha_own=float(payload.get("alpha_own", 0.5)),
+        beta_own=float(payload.get("beta_own", 0.5)),
+        tier=tier,
     )

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from lattice.apply import apply_proposal
-from lattice.cluster import build_hints, cluster, gate_open, new_episodes, rank
+from lattice.consolidate.apply import apply_proposal
+from lattice.consolidate.cluster import build_hints, cluster, gate_open, new_episodes, rank
+from lattice.consolidate.validate import validate_proposal
 from lattice.contracts.atom import AtomStore
 from lattice.contracts.cursor import ConsolidationCursor
 from lattice.contracts.episodic import EpisodicReader
@@ -18,9 +19,10 @@ from lattice.directive import (
 )
 from lattice.domain.packet import Packet
 from lattice.domain.proposal import Proposal
-from lattice.domain.result import ApplyResult, ValidationResult
-from lattice.retrieve import render_context
-from lattice.validate import validate_proposal
+from lattice.domain.result import AdjudicateResult, ApplyResult, ForgetResult, ValidationResult
+from lattice.semantic.adjudicate import adjudicate_atoms
+from lattice.semantic.forget import forget_employee
+from lattice.semantic.retrieve import render_context
 
 
 class Lattice:
@@ -79,15 +81,59 @@ class Lattice:
 
     def apply(self, proposal: Proposal) -> ApplyResult:
         validation = self.validate(proposal)
+        episodes = self._episodes.records_for(proposal.employee_id)
+        episodes_by_run_id = {episode.run_id: episode for episode in episodes}
         result = apply_proposal(
             proposal,
             validation,
             atoms=self._atoms,
+            episodes_by_run_id=episodes_by_run_id,
             patches=self._patches,
         )
         if result.ok:
             self._advance_cursor(proposal.employee_id)
         return result
+
+    def adjudicate(self, employee_id: str) -> AdjudicateResult:
+        """Update pattern posteriors from episodic outcomes since last consolidation."""
+        watermark = self._cursor.get(employee_id)
+        episodes = self._episodes.records_for(employee_id)
+        fresh = new_episodes(episodes, watermark)
+        active = self._atoms.list_active(employee_id)
+        if not fresh or not active:
+            return AdjudicateResult(
+                employee_id=employee_id,
+                atoms_updated=0,
+                episodes_processed=len(fresh),
+            )
+
+        updated_atoms = adjudicate_atoms(active, episodes, watermark)
+        atoms_updated = 0
+        for before, after in zip(active, updated_atoms, strict=True):
+            if after.stats != before.stats:
+                self._atoms.write(after)
+                atoms_updated += 1
+
+        return AdjudicateResult(
+            employee_id=employee_id,
+            atoms_updated=atoms_updated,
+            episodes_processed=len(fresh),
+        )
+
+    def forget(self, employee_id: str) -> ForgetResult:
+        """Discount own-evidence counts and invalidate patterns below floor."""
+        discounted, invalidated = forget_employee(employee_id, atoms=self._atoms)
+        return ForgetResult(
+            employee_id=employee_id,
+            atoms_discounted=discounted,
+            atoms_invalidated=invalidated,
+        )
+
+    def has_fresh_episodes(self, employee_id: str) -> bool:
+        """True when episodic deltas exist since the consolidation cursor."""
+        watermark = self._cursor.get(employee_id)
+        episodes = self._episodes.records_for(employee_id)
+        return len(new_episodes(episodes, watermark)) > 0
 
     def context(self, employee_id: str, query: str, *, k: int = 5) -> str:
         atoms = self._atoms.list_active(employee_id)
@@ -103,11 +149,11 @@ class Lattice:
 
     def _advance_cursor(self, employee_id: str) -> None:
         episodes = self._episodes.records_for(employee_id)
-        watermark_run_id = episodes[0].run_id if episodes else None
-        if watermark_run_id is None:
+        if not episodes:
             return
+        latest = max(episodes, key=lambda episode: episode.created_at)
         self._cursor.advance(
             employee_id,
-            last_run_id=watermark_run_id,
+            last_run_id=latest.run_id,
             episodes_seen=len(episodes),
         )

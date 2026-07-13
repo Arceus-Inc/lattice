@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>lattice × chorus — memory consolidation flow</title>
+  <style>
+    :root {
+      --bg: #0a0c10;
+      --panel: #12151c;
+      --border: #2a3040;
+      --text: #e8eaef;
+      --muted: #8b93a7;
+      --chorus: #3b82f6;
+      --lattice: #a855f7;
+      --agent: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --loop: #fbbf24;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    .stage {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.6s ease;
+      padding: 2rem 2.5rem 5rem;
+    }
+    .stage.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .badge {
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-size: clamp(1.6rem, 4vw, 2.4rem);
+      font-weight: 600;
+      line-height: 1.2;
+      margin-bottom: 0.75rem;
+    }
+    .subtitle {
+      color: var(--muted);
+      font-size: 1.05rem;
+      max-width: 52rem;
+      line-height: 1.5;
+      margin-bottom: 1.5rem;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+      flex: 1;
+      min-height: 0;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      flex: 1;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .card h3 {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+    .card p, .card li {
+      font-size: 0.95rem;
+      line-height: 1.45;
+      color: var(--text);
+    }
+    .card ul { padding-left: 1.1rem; }
+    .owner-chorus { border-left: 3px solid var(--chorus); }
+    .owner-lattice { border-left: 3px solid var(--lattice); }
+    .owner-agent { border-left: 3px solid var(--agent); }
+    .diagram {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 280px;
+    }
+    svg { max-width: 100%; max-height: 420px; }
+    .loop-ring {
+      fill: none;
+      stroke: #3b82f6;
+      stroke-width: 2;
+      opacity: 0.35;
+    }
+    .loop-node {
+      fill: var(--bg);
+      stroke: var(--loop);
+      stroke-width: 2;
+    }
+    .loop-node.forget {
+      stroke: var(--danger);
+    }
+    .loop-label {
+      fill: var(--text);
+      font-size: 13px;
+      font-weight: 600;
+      text-anchor: middle;
+    }
+    .flow-box {
+      fill: var(--panel);
+      stroke: var(--border);
+      stroke-width: 1.5;
+      rx: 8;
+    }
+    .flow-box.chorus { stroke: var(--chorus); }
+    .flow-box.lattice { stroke: var(--lattice); }
+    .flow-box.agent { stroke: var(--agent); }
+    .flow-text {
+      fill: var(--text);
+      font-size: 12px;
+      text-anchor: middle;
+    }
+    .flow-arrow {
+      stroke: var(--muted);
+      stroke-width: 1.5;
+      fill: none;
+      marker-end: url(#arrow);
+    }
+    .pulse {
+      animation: pulse 1.8s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; }
+      50% { opacity: 1; }
+    }
+    .highlight { color: var(--loop); font-weight: 600; }
+    .code {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 0.8rem;
+      background: #0d1017;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      overflow: auto;
+      white-space: pre;
+      line-height: 1.4;
+      color: #c4cad6;
+    }
+    .timeline {
+      display: flex;
+      gap: 0.5rem;
+      align-items: stretch;
+      flex: 1;
+      min-height: 200px;
+    }
+    .step-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .step-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--border);
+      transition: background 0.3s, transform 0.3s;
+    }
+    .step-col.on .step-dot {
+      background: var(--lattice);
+      transform: scale(1.3);
+    }
+    .step-label {
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-align: center;
+      max-width: 90px;
+    }
+    .step-col.on .step-label { color: var(--text); }
+    .controls {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(10, 12, 16, 0.95);
+      border-top: 1px solid var(--border);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      z-index: 100;
+    }
+    button {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.45rem 1rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    button:hover { border-color: var(--lattice); }
+    .progress-wrap {
+      flex: 1;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      background: var(--lattice);
+      width: 0%;
+      transition: width 0.3s linear;
+    }
+    .scene-counter {
+      font-size: 0.8rem;
+      color: var(--muted);
+      min-width: 4rem;
+      text-align: right;
+    }
+    .tag {
+      display: inline-block;
+      font-size: 0.65rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      margin-right: 0.35rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .tag-chorus { background: rgba(59,130,246,0.2); color: var(--chorus); }
+    .tag-lattice { background: rgba(168,85,247,0.2); color: var(--lattice); }
+    .tag-agent { background: rgba(34,197,94,0.2); color: var(--agent); }
+    .compare-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      font-size: 0.9rem;
+    }
+    .compare-row dt { color: var(--muted); margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+
+<!-- Scene 0: Title -->
+<section class="stage active" data-scene="0">
+  <div class="badge">Arceus · dream · chorus · lattice</div>
+  <h1>Memory consolidation flow</h1>
+  <p class="subtitle">
+    Episodic beats from chorus → Hebbian bonds &amp; gates in lattice →
+    <span class="highlight">agent-authored proposals</span> → validate &amp; apply →
+    semantic MEMORY + procedural SKILL overlays → retrieval on the next beat.
+  </p>
+  <div class="diagram">
+    <svg viewBox="0 0 640 200" width="640">
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="#8b93a7"/>
+        </marker>
+      </defs>
+      <rect class="flow-box chorus" x="20" y="70" width="110" height="50"/><text class="flow-text" x="75" y="100">dream</text>
+      <rect class="flow-box chorus" x="150" y="70" width="110" height="50"/><text class="flow-text" x="205" y="100">chorus</text>
+      <rect class="flow-box lattice" x="280" y="70" width="110" height="50"/><text class="flow-text" x="335" y="100">lattice</text>
+      <rect class="flow-box agent" x="410" y="70" width="110" height="50"/><text class="flow-text" x="465" y="100">employee</text>
+      <rect class="flow-box" x="540" y="70" width="80" height="50"/><text class="flow-text" x="580" y="100">horizon</text>
+      <path class="flow-arrow" d="M130 95 H150"/><path class="flow-arrow" d="M260 95 H280"/><path class="flow-arrow" d="M390 95 H410"/>
+      <text class="flow-text" x="320" y="160" fill="#8b93a7">no sideways imports · meet at contracts + data layer</text>
+    </svg>
+  </div>
+</section>
+
+<!-- Scene 1: Three memory tiers -->
+<section class="stage" data-scene="1">
+  <div class="badge">Hermes / CLS model</div>
+  <h1>Three memory tiers</h1>
+  <p class="subtitle">Hippocampus-fast episodic capture; neocortex-slow semantic + procedural consolidation.</p>
+  <div class="grid-3">
+    <div class="card owner-chorus">
+      <h3>Episodic (chorus)</h3>
+      <ul>
+        <li>One <code>SprintDelta</code> per beat</li>
+        <li>SQLite <code>episodic.db</code></li>
+        <li>Pull: <code>recall()</code></li>
+        <li>Immutable engrams</li>
+      </ul>
+    </div>
+    <div class="card owner-lattice">
+      <h3>Semantic (lattice P0)</h3>
+      <ul>
+        <li>Schemas + assertions</li>
+        <li><code>MEMORY.md</code> + atoms</li>
+        <li>Pull: <code>lattice_context</code></li>
+        <li>Push: beat-start teaser</li>
+      </ul>
+    </div>
+    <div class="card owner-lattice">
+      <h3>Procedural (lattice P1)</h3>
+      <ul>
+        <li>Scripts + SKILL overlays</li>
+        <li>evolved-skills/</li>
+        <li>Merged at harness materialize</li>
+        <li>Only from <code>done</code> beats</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- Scene 2: THE LOOP -->
+<section class="stage" data-scene="2">
+  <div class="badge">THE LOOP</div>
+  <h1>Write → Store → … → Forget</h1>
+  <p class="subtitle">chorus owns WRITE / STORE / RETRIEVE (pull). lattice owns RANK → RECONCILE → FORGET.</p>
+  <div class="diagram">
+    <svg viewBox="0 0 400 400" width="400">
+      <circle class="loop-ring" cx="200" cy="200" r="140"/>
+      <g class="pulse">
+        <circle class="loop-node" cx="200" cy="60" r="28"/><text class="loop-label" x="200" y="65">WRITE</text>
+        <circle class="loop-node" cx="320" cy="120" r="28"/><text class="loop-label" x="320" y="125">STORE</text>
+        <circle class="loop-node" cx="340" cy="240" r="28"/><text class="loop-label" x="340" y="245">RETRIEVE</text>
+        <circle class="loop-node" cx="260" cy="340" r="28"/><text class="loop-label" x="260" y="345">RANK</text>
+        <circle class="loop-node" cx="140" cy="340" r="28"/><text class="loop-label" x="140" y="345">RECONCILE</text>
+        <circle class="loop-node forget" cx="60" cy="240" r="28"/><text class="loop-label" x="60" y="245">FORGET</text>
+      </g>
+      <text fill="#3b82f6" font-size="11" x="200" y="200" text-anchor="middle">chorus</text>
+      <text fill="#a855f7" font-size="11" x="200" y="215" text-anchor="middle">lattice</text>
+    </svg>
+  </div>
+</section>
+
+<!-- Scene 3: Beat capture -->
+<section class="stage" data-scene="3">
+  <div class="badge">Beat end · chorus</div>
+  <h1>WRITE + STORE</h1>
+  <p class="subtitle">Scheduler captures an honest engram — outcome, files, prose. lattice never intercepts raw writes.</p>
+  <div class="code">SprintDelta(
+  run_id="r_9a2…",
+  employee_id="e_be_1",
+  intent="add retry to upload client",
+  outcome="done",          # done | incomplete | blocked
+  score=0.91,
+  files_touched=("src/api/client.py",),
+  body="…worker prose + reasoning…"   # evidence, not instructions
+)
+→ EpisodicStore.append()   # append-only, idempotent</div>
+</section>
+
+<!-- Scene 4: Hebbian bonds -->
+<section class="stage" data-scene="4">
+  <div class="badge">lattice · deterministic</div>
+  <h1>RANK + Hebbian bonds</h1>
+  <p class="subtitle">Engrams that fire together wire together — shared files, intent, task thread strengthen bond weight.</p>
+  <div class="grid-2">
+    <div class="card owner-lattice">
+      <h3>EpisodeSelector</h3>
+      <ul>
+        <li>Prefer <code>outcome=done</code></li>
+        <li>Recency tie-break</li>
+        <li>Batch of N engrams</li>
+      </ul>
+    </div>
+    <div class="card owner-lattice">
+      <h3>Bond store</h3>
+      <ul>
+        <li>co-activation edges</li>
+        <li>weight += 1 on replay</li>
+        <li>RecMem: cluster ≥ θ → gate opens</li>
+      </ul>
+    </div>
+  </div>
+  <div class="diagram" style="margin-top:1rem">
+    <svg viewBox="0 0 500 120" width="500">
+      <circle fill="#a855f7" cx="80" cy="60" r="20" opacity="0.8"/><text x="80" y="64" fill="#fff" font-size="10" text-anchor="middle">r_1</text>
+      <circle fill="#a855f7" cx="180" cy="40" r="20" opacity="0.8"/><text x="180" y="44" fill="#fff" font-size="10" text-anchor="middle">r_4</text>
+      <circle fill="#a855f7" cx="180" cy="80" r="20" opacity="0.8"/><text x="180" y="84" fill="#fff" font-size="10" text-anchor="middle">r_7</text>
+      <line x1="100" y1="55" x2="160" y2="45" stroke="#fbbf24" stroke-width="3"/>
+      <line x1="100" y1="65" x2="160" y2="75" stroke="#fbbf24" stroke-width="3"/>
+      <text x="130" y="35" fill="#fbbf24" font-size="10">bond w=3</text>
+      <rect class="flow-box lattice" x="280" y="35" width="180" height="50"/>
+      <text class="flow-text" x="370" y="65">gate: recurrence ≥ 5</text>
+    </svg>
+  </div>
+</section>
+
+<!-- Scene 5: PromotionCandidate -->
+<section class="stage" data-scene="5">
+  <div class="badge">lattice homework</div>
+  <h1>PromotionCandidate packet</h1>
+  <p class="subtitle">lattice prepares structured hints — agent still authors the words.</p>
+  <div class="code">ConsolidationPacket(
+  candidates=[
+    PromotionCandidate(
+      id="c_12",
+      schema_id="deploy_pattern",
+      slot="migration_order",
+      evidence_run_ids=("r_4","r_7","r_9"),
+      recurrence_count=3,
+      bond_weight=0.82,
+      hint="3 beats: migrate before app boot",
+    ),
+  ],
+  existing_schemas=[...],
+  bonds=[...],
+)</div>
+</section>
+
+<!-- Scene 6: Agent proposal -->
+<section class="stage" data-scene="6">
+  <div class="badge">employee agent · Greplica-shaped</div>
+  <h1>Agent authors Proposal</h1>
+  <p class="subtitle">Reads engram prose via recall + packet. Writes structured JSON — like greplica-update-working-memory.</p>
+  <div class="code">Proposal(
+  employee_id="e_be_1",
+  operations=[
+    ProposalOp(
+      kind="assert",
+      schema_id="deploy_pattern",
+      slot="migration_order",
+      claim="Run migrations before app container in compose; verified on 3 beats.",
+      source_run_ids=("r_4","r_7","r_9"),
+      answers_candidate_id="c_12",
+    ),
+    ProposalOp(
+      kind="skill_patch",
+      skill_slug="testcontainers-integration",
+      section="Boot order",
+      new_content="…",
+      source_run_ids=("r_9",),  # outcome=done required
+    ),
+  ],
+)</div>
+</section>
+
+<!-- Scene 7: Validate + Apply -->
+<section class="stage" data-scene="7">
+  <div class="badge">lattice governance</div>
+  <h1>validate → apply</h1>
+  <p class="subtitle">No LLM in validation. Deterministic rules + atomic write.</p>
+  <div class="grid-2">
+    <div class="card owner-lattice">
+      <h3>validate(proposal)</h3>
+      <ul>
+        <li>source_run_ids exist &amp; match employee</li>
+        <li>schema slots match role template</li>
+        <li>no contradiction without supersedes</li>
+        <li>skill_patch needs done engram</li>
+      </ul>
+    </div>
+    <div class="card owner-lattice">
+      <h3>apply(proposal)</h3>
+      <ul>
+        <li>write SemanticAtom → MEMORY.md</li>
+        <li>write Script / SKILL overlay</li>
+        <li>invalidate superseded (invalid_at)</li>
+        <li>reinforce bonds · advance cursor</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- Scene 8: Retrieval next beat -->
+<section class="stage" data-scene="8">
+  <div class="badge">Next beat</div>
+  <h1>RETRIEVE on the next beat</h1>
+  <p class="subtitle">Pull tools + push teaser. Potentiation on each hit (ACT-R activation boost).</p>
+  <div class="timeline" id="retrieval-timeline">
+    <div class="step-col"><div class="step-dot"></div><div class="step-label">SESSION_START hook</div></div>
+    <div class="step-col"><div class="step-dot"></div><div class="step-label">semantic teaser</div></div>
+    <div class="step-col"><div class="step-dot"></div><div class="step-label">lattice_context</div></div>
+    <div class="step-col"><div class="step-dot"></div><div class="step-label">recall()</div></div>
+    <div class="step-col"><div class="step-dot"></div><div class="step-label">work beat</div></div>
+    <div class="step-col"><div class="step-dot"></div><div class="step-label">STOP hook</div></div>
+  </div>
+  <div class="compare-row" style="margin-top:1.5rem">
+    <dl>
+      <dt><span class="tag tag-lattice">pull semantic</span></dt>
+      <dd>lattice_context("retry timeout commerce")</dd>
+      <dt><span class="tag tag-chorus">pull episodic</span></dt>
+      <dd>recall(query="retry timeout")</dd>
+    </dl>
+    <dl>
+      <dt><span class="tag tag-lattice">push</span></dt>
+      <dd>3-line MEMORY catalogue in brief</dd>
+      <dt><span class="tag tag-agent">procedural</span></dt>
+      <dd>canonical SKILL + evolved overlay merged</dd>
+    </dl>
+  </div>
+</section>
+
+<!-- Scene 9: Greplica comparison -->
+<section class="stage" data-scene="9">
+  <div class="badge">vs Greplica</div>
+  <h1>Same loop, different ontology</h1>
+  <p class="subtitle">Greplica: claims · components · flows (code). lattice: schemas · bonds · scripts (any role).</p>
+  <div class="grid-2">
+    <div class="card">
+      <h3>Greplica</h3>
+      <ul>
+        <li>Session transcript → proposal</li>
+        <li>graph context CLI</li>
+        <li>Stop hook → background agent</li>
+        <li>Code anchors</li>
+      </ul>
+    </div>
+    <div class="card owner-lattice">
+      <h3>lattice + chorus</h3>
+      <ul>
+        <li>Beat engram → proposal</li>
+        <li>lattice_context + recall</li>
+        <li>Stop hook → packet → same employee</li>
+        <li>files_touched + role schemas</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- Scene 10: End -->
+<section class="stage" data-scene="10">
+  <div class="badge">Summary</div>
+  <h1>Agent writes · lattice validates</h1>
+  <p class="subtitle">
+    chorus = honest episodic capture · lattice = bonds, gates, validate, apply, retrieve ·
+    employee = proposal author from prose + traces · no shadow curator LLM.
+  </p>
+  <div class="diagram">
+    <svg viewBox="0 0 600 180" width="600">
+      <rect class="flow-box chorus" x="10" y="60" width="90" height="44"/><text class="flow-text" x="55" y="86">engram</text>
+      <rect class="flow-box lattice" x="120" y="60" width="90" height="44"/><text class="flow-text" x="165" y="86">packet</text>
+      <rect class="flow-box agent" x="230" y="60" width="90" height="44"/><text class="flow-text" x="275" y="86">proposal</text>
+      <rect class="flow-box lattice" x="340" y="60" width="90" height="44"/><text class="flow-text" x="385" y="86">validate</text>
+      <rect class="flow-box lattice" x="450" y="60" width="90" height="44"/><text class="flow-text" x="495" y="86">apply</text>
+      <rect class="flow-box lattice" x="560" y="60" width="30" height="44"/><text class="flow-text" x="575" y="86" font-size="9">→</text>
+      <path class="flow-arrow" d="M100 82 H120"/><path class="flow-arrow" d="M210 82 H230"/><path class="flow-arrow" d="M320 82 H340"/><path class="flow-arrow" d="M430 82 H450"/>
+      <text class="flow-text" x="300" y="140" fill="#8b93a7">github.com/Arceus-Inc/lattice</text>
+    </svg>
+  </div>
+</section>
+
+<div class="controls">
+  <button type="button" id="btn-prev">← Prev</button>
+  <button type="button" id="btn-play">⏸ Pause</button>
+  <button type="button" id="btn-next">Next →</button>
+  <div class="progress-wrap"><div class="progress-bar" id="progress"></div></div>
+  <span class="scene-counter" id="counter">1 / 11</span>
+</div>
+
+<script>
+(function () {
+  const scenes = document.querySelectorAll(".stage");
+  const total = scenes.length;
+  let index = 0;
+  let playing = true;
+  let timer = null;
+  const INTERVAL_MS = 5500;
+
+  const progress = document.getElementById("progress");
+  const counter = document.getElementById("counter");
+  const btnPlay = document.getElementById("btn-play");
+
+  function show(i) {
+    index = (i + total) % total;
+    scenes.forEach((s, j) => s.classList.toggle("active", j === index));
+    progress.style.width = ((index + 1) / total * 100) + "%";
+    counter.textContent = (index + 1) + " / " + total;
+    if (index === 8) animateRetrieval();
+  }
+
+  function animateRetrieval() {
+    const cols = document.querySelectorAll("#retrieval-timeline .step-col");
+    cols.forEach((c, i) => {
+      setTimeout(() => {
+        cols.forEach(x => x.classList.remove("on"));
+        c.classList.add("on");
+      }, i * 600);
+    });
+  }
+
+  function schedule() {
+    clearInterval(timer);
+    if (!playing) return;
+    timer = setInterval(() => show(index + 1), INTERVAL_MS);
+  }
+
+  document.getElementById("btn-prev").onclick = () => { show(index - 1); schedule(); };
+  document.getElementById("btn-next").onclick = () => { show(index + 1); schedule(); };
+  btnPlay.onclick = () => {
+    playing = !playing;
+    btnPlay.textContent = playing ? "⏸ Pause" : "▶ Play";
+    schedule();
+  };
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowRight") { show(index + 1); schedule(); }
+    if (e.key === "ArrowLeft") { show(index - 1); schedule(); }
+    if (e.key === " ") { e.preventDefault(); btnPlay.click(); }
+  });
+
+  schedule();
+})();
+</script>
+</body>
+</html>

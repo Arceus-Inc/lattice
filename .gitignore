@@ -35,5 +35,8 @@ coverage.xml
 .DS_Store
 Thumbs.db
 
+# agent / OMX local workspace
+.omx/
+
 # chorus runtime state created by seam demos
 .chorus/

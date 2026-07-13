@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from lattice.compile import compile_proposal
+from lattice.consolidate.compile import compile_proposal
 from lattice.contracts.atom import Atom, AtomStore
+from lattice.contracts.episodic import RawEpisode
 from lattice.contracts.patch import PatchStore, SkillDraft, SkillPatch
 from lattice.domain.proposal import OpKind, Proposal
 from lattice.domain.result import ApplyResult, ValidationResult
+from lattice.domain.stats import PatternStats
+from lattice.semantic.adjudicate import key_files_from_runs
 
 
 def apply_proposal(
@@ -16,6 +19,7 @@ def apply_proposal(
     validation: ValidationResult,
     *,
     atoms: AtomStore,
+    episodes_by_run_id: dict[str, RawEpisode] | None = None,
     patches: PatchStore | None = None,
 ) -> ApplyResult:
     """Apply a pre-validated proposal."""
@@ -25,6 +29,7 @@ def apply_proposal(
     now = datetime.now(UTC)
     atoms_written = 0
     habits_written = 0
+    episodes = episodes_by_run_id or {}
 
     for op in compile_proposal(proposal):
         if op.kind is OpKind.PATCH:
@@ -68,6 +73,11 @@ def apply_proposal(
             employee_id=proposal.employee_id,
             source_run_ids=op.source_run_ids,
             created_at=now,
+            stats=PatternStats(
+                alpha_own=0.5 + float(len(op.source_run_ids)),
+                beta_own=0.5,
+            ),
+            key_files=key_files_from_runs(op.source_run_ids, episodes),
         )
         atoms.write(atom)
         atoms_written += 1

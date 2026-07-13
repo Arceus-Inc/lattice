@@ -63,7 +63,7 @@ def test_default_gate_requires_n_beats(tmp_path: Path) -> None:
     assert lattice.gate_open("e1") is False
     assert lattice.beat_end_teaser("e1") == ""
 
-    one_more = (*episodes, _episode("r_last"))
+    one_more = episodes + (_episode("r_last"),)
     lattice2 = build_default(consolidated_root=tmp_path, episodes=_Reader(one_more))
     assert lattice2.gate_open("e1") is True
     assert "Lattice gate open" in lattice2.beat_end_teaser("e1")

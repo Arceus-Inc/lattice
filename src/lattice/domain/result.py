@@ -30,3 +30,21 @@ class ApplyResult:
     @staticmethod
     def failed(*errors: str, employee_id: str = "") -> ApplyResult:
         return ApplyResult(employee_id=employee_id, errors=errors)
+
+
+@dataclass(frozen=True)
+class AdjudicateResult:
+    """Outcome of outcome-grounded adjudication over active atoms."""
+
+    employee_id: str
+    atoms_updated: int = 0
+    episodes_processed: int = 0
+
+
+@dataclass(frozen=True)
+class ForgetResult:
+    """Outcome of the sleep forget/discount pass."""
+
+    employee_id: str
+    atoms_discounted: int = 0
+    atoms_invalidated: int = 0
