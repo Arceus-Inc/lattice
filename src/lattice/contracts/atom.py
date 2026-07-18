@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from lattice.domain.stats import PatternStats
@@ -23,24 +23,3 @@ class Atom:
     activation: float = 1.0
     stats: PatternStats | None = None
     key_files: tuple[str, ...] = ()
-
-
-@runtime_checkable
-class AtomStore(Protocol):
-    """Push-channel semantic memory — atoms are source of truth; MEMORY.md is a view."""
-
-    def list_active(self, employee_id: str) -> tuple[Atom, ...]:
-        """Active atoms for one agent, newest first."""
-        ...
-
-    def get_active(self, employee_id: str, key: str) -> Atom | None:
-        """Active atom at key, if any."""
-        ...
-
-    def write(self, atom: Atom) -> None:
-        """Persist one atom."""
-        ...
-
-    def invalidate(self, employee_id: str, key: str, *, at: datetime) -> None:
-        """Mark the active atom at key invalid."""
-        ...

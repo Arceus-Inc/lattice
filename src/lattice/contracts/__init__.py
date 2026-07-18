@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from lattice.contracts.atom import Atom, AtomStore
-from lattice.contracts.cursor import ConsolidationCursor, ConsolidationWatermark
+from lattice.contracts.atom import Atom
+from lattice.contracts.cursor import ConsolidationWatermark
 from lattice.contracts.episodic import EpisodicReader, RawEpisode
 from lattice.contracts.patch import PatchStore, SkillDraft, SkillPatch
 
 __all__ = [
     "Atom",
-    "AtomStore",
-    "ConsolidationCursor",
     "ConsolidationWatermark",
     "EpisodicReader",
     "PatchStore",

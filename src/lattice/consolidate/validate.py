@@ -10,10 +10,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from lattice.contracts.atom import AtomStore
 from lattice.contracts.episodic import RawEpisode
 from lattice.domain.proposal import HabitAction, HabitDraft, PatternDraft, Proposal
 from lattice.domain.result import ValidationResult
+from lattice.stores.memory_md import MemoryMdStore
 
 KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.]+$")
 SLUG_PATTERN = re.compile(r"^[a-z][a-z0-9-]+$")
@@ -37,7 +37,7 @@ def validate_proposal(
     proposal: Proposal,
     *,
     episodes: tuple[RawEpisode, ...],
-    atoms: AtomStore,
+    atoms: MemoryMdStore,
     max_ops: int = DEFAULT_MAX_OPS,
     canonical_skills_root: Path | None = None,
 ) -> ValidationResult:
@@ -251,7 +251,7 @@ def _canonical_slugs(root: Path | None) -> set[str]:
     return {path.name for path in root.iterdir() if path.is_dir() and (path / "SKILL.md").exists()}
 
 
-def _evolved_slugs(atoms: AtomStore, employee_id: str) -> set[str]:
+def _evolved_slugs(atoms: MemoryMdStore, employee_id: str) -> set[str]:
     """Discover prior evolved overlays when the atom store exposes a root path."""
     root = getattr(atoms, "root", None)
     if root is None:

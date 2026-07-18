@@ -5,13 +5,14 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 
-from lattice.contracts.atom import Atom, AtomStore
+from lattice.contracts.atom import Atom
 from lattice.domain.stats import (
     DEFAULT_ADJUDICATION_PARAMS,
     AdjudicationParams,
     PatternStats,
     tier_from_stats,
 )
+from lattice.stores.memory_md import MemoryMdStore
 
 
 def discount_stats(
@@ -58,7 +59,7 @@ def forget_atoms(
 def forget_employee(
     employee_id: str,
     *,
-    atoms: AtomStore,
+    atoms: MemoryMdStore,
     params: AdjudicationParams = DEFAULT_ADJUDICATION_PARAMS,
 ) -> tuple[int, int]:
     """Run forget pass; returns (discounted_count, invalidated_count)."""
