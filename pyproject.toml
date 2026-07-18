@@ -38,9 +38,6 @@ dev = [
   "chorus",
 ]
 
-[project.scripts]
-lattice = "lattice_cli.__main__:main"
-
 [project.urls]
 Homepage   = "https://github.com/Arceus-Inc/lattice"
 Repository = "https://github.com/Arceus-Inc/lattice"
@@ -52,10 +49,10 @@ dream = { path = "../dream", editable = true }
 chorus = { path = "../chorus", editable = true }
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/lattice", "src/lattice_cli"]
+packages = ["src/lattice"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/lattice", "src/lattice_cli", "tests", "docs", "examples", "README.md", "pyproject.toml"]
+include = ["src/lattice", "tests", "docs", "examples", "README.md", "pyproject.toml"]
 
 [tool.ruff]
 line-length = 100
@@ -73,7 +70,7 @@ ignore = ["E501"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-packages = ["lattice", "lattice_cli"]
+packages = ["lattice"]
 mypy_path = "src"
 warn_unused_ignores = true
 warn_redundant_casts = true

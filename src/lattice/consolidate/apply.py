@@ -5,20 +5,21 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from lattice.consolidate.compile import compile_proposal
-from lattice.contracts.atom import Atom, AtomStore
+from lattice.contracts.atom import Atom
 from lattice.contracts.episodic import RawEpisode
 from lattice.contracts.patch import PatchStore, SkillDraft, SkillPatch
 from lattice.domain.proposal import OpKind, Proposal
 from lattice.domain.result import ApplyResult, ValidationResult
 from lattice.domain.stats import PatternStats
 from lattice.semantic.adjudicate import key_files_from_runs
+from lattice.stores.memory_md import MemoryMdStore
 
 
 def apply_proposal(
     proposal: Proposal,
     validation: ValidationResult,
     *,
-    atoms: AtomStore,
+    atoms: MemoryMdStore,
     episodes_by_run_id: dict[str, RawEpisode] | None = None,
     patches: PatchStore | None = None,
 ) -> ApplyResult:
