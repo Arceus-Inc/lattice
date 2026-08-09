@@ -13,9 +13,16 @@ from lattice.domain import (
     ValidationResult,
 )
 from lattice.facade import Lattice
+from lattice.reflection import (
+    FailureCategory,
+    ReflectionCluster,
+    TrajectoryEvidence,
+    cluster_reflection_evidence,
+)
 
 __all__ = [
     "ApplyResult",
+    "FailureCategory",
     "HabitAction",
     "HabitDraft",
     "HintKind",
@@ -23,5 +30,8 @@ __all__ = [
     "Packet",
     "PatternDraft",
     "Proposal",
+    "ReflectionCluster",
+    "TrajectoryEvidence",
     "ValidationResult",
+    "cluster_reflection_evidence",
 ]
