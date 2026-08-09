@@ -10,7 +10,7 @@ from uuid import UUID
 import psycopg
 from psycopg.rows import tuple_row
 
-from lattice.contracts.cursor import ConsolidationWatermark
+from lattice.contracts.cursor import ConsolidationWatermark, CursorConflictError
 
 
 class PostgresCursorStore:
@@ -68,15 +68,34 @@ class PostgresCursorStore:
     def advance(self, employee_id: str, *, last_run_id: str, episodes_seen: int) -> None:
         if episodes_seen < 0:
             raise ValueError("episodes_seen must be nonnegative")
-        self._connection.execute(
-            "INSERT INTO lattice_consolidation_cursor "
-            "(employee_id, last_run_id, episodes_seen, consolidated_at) VALUES (%s, %s, %s, %s) "
-            "ON CONFLICT (company_id, employee_id) DO UPDATE SET "
-            "last_run_id = EXCLUDED.last_run_id, episodes_seen = EXCLUDED.episodes_seen, "
-            "consolidated_at = EXCLUDED.consolidated_at "
-            "WHERE lattice_consolidation_cursor.episodes_seen < EXCLUDED.episodes_seen",
-            (employee_id, last_run_id, episodes_seen, datetime.now(UTC)),
-        )
+        with self._connection.transaction():
+            advanced = self._connection.execute(
+                "INSERT INTO lattice_consolidation_cursor "
+                "(employee_id, last_run_id, episodes_seen, consolidated_at) VALUES (%s, %s, %s, %s) "
+                "ON CONFLICT (company_id, employee_id) DO UPDATE SET "
+                "last_run_id = EXCLUDED.last_run_id, episodes_seen = EXCLUDED.episodes_seen, "
+                "consolidated_at = EXCLUDED.consolidated_at "
+                "WHERE lattice_consolidation_cursor.episodes_seen < EXCLUDED.episodes_seen "
+                "RETURNING last_run_id, episodes_seen",
+                (employee_id, last_run_id, episodes_seen, datetime.now(UTC)),
+            ).fetchone()
+            if advanced is not None:
+                return
+
+            current = self._connection.execute(
+                "SELECT last_run_id, episodes_seen FROM lattice_consolidation_cursor "
+                "WHERE employee_id = %s FOR UPDATE",
+                (employee_id,),
+            ).fetchone()
+            if current is None:
+                raise RuntimeError("cursor upsert did not return a persisted watermark")
+            current_run_id = _as_text(current[0], "last_run_id")
+            current_episodes_seen = _as_nonnegative_int(current[1], "episodes_seen")
+            if current_episodes_seen == episodes_seen and current_run_id != last_run_id:
+                raise CursorConflictError(
+                    f"cursor for {employee_id!r} already records {current_run_id!r} "
+                    f"at episodes_seen={episodes_seen}"
+                )
 
 
 def _as_text(value: object, column: str) -> str:

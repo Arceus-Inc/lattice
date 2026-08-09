@@ -17,6 +17,10 @@ class ConsolidationWatermark:
     consolidated_at: datetime | None
 
 
+class CursorConflictError(RuntimeError):
+    """A same-count cursor advance disagrees with the persisted run boundary."""
+
+
 class CursorStore(Protocol):
     """Persistence port for per-employee consolidation watermarks."""
 
