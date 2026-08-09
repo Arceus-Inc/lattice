@@ -20,12 +20,12 @@ from lattice.reflection import (
 )
 
 
-def _episode(run_id: str) -> RawEpisode:
+def _episode(run_id: str, *, employee_id: str = "agent-a") -> RawEpisode:
     now = datetime.now(UTC)
     return RawEpisode(
         run_id=run_id,
         task_id="task",
-        employee_id="employee",
+        employee_id=employee_id,
         role="backend_engineer",
         scope="project",
         intent="update the retry client",
@@ -168,6 +168,28 @@ def test_proposal_rejects_self_coaching() -> None:
         _proposal(target_agent_id="coach-a")
 
 
+def test_proposal_rejects_evidence_from_another_agent() -> None:
+    category = FailureCategory(code="retry-policy")
+    foreign_cluster = ReflectionCluster(
+        failure_category=category,
+        evidence=(
+            TrajectoryEvidence(
+                episode=_episode("run-1", employee_id="agent-b"),
+                failure_category=category,
+                observation="The client retried an invalid request.",
+            ),
+            TrajectoryEvidence(
+                episode=_episode("run-2", employee_id="agent-b"),
+                failure_category=category,
+                observation="The client retried an invalid request again.",
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="evidence must belong to the target agent"):
+        _proposal(evidence_cluster=foreign_cluster)
+
+
 def test_proposal_requires_a_caller_supplied_target_kind() -> None:
     with pytest.raises(ValueError, match="target kind must be a ReflectionTargetKind"):
         ReflectionProposal(
@@ -210,12 +232,60 @@ def test_proposal_enforces_target_replacement_size_limits(
         "message",
     ),
     (
-        ("  ", "coach-a", "agent-a", "retry-guidance", "Do not retry validation errors.", "Two runs.", "proposal id must not be blank"),
-        ("reflection-001", "  ", "agent-a", "retry-guidance", "Do not retry validation errors.", "Two runs.", "proposing coach id must not be blank"),
-        ("reflection-001", "coach-a", "  ", "retry-guidance", "Do not retry validation errors.", "Two runs.", "target agent id must not be blank"),
-        ("reflection-001", "coach-a", "agent-a", "  ", "Do not retry validation errors.", "Two runs.", "target identity must not be blank"),
-        ("reflection-001", "coach-a", "agent-a", "retry-guidance", "  ", "Two runs.", "replacement text must not be blank"),
-        ("reflection-001", "coach-a", "agent-a", "retry-guidance", "Do not retry validation errors.", "  ", "proposal rationale must not be blank"),
+        (
+            "  ",
+            "coach-a",
+            "agent-a",
+            "retry-guidance",
+            "Do not retry validation errors.",
+            "Two runs.",
+            "proposal id must not be blank",
+        ),
+        (
+            "reflection-001",
+            "  ",
+            "agent-a",
+            "retry-guidance",
+            "Do not retry validation errors.",
+            "Two runs.",
+            "proposing coach id must not be blank",
+        ),
+        (
+            "reflection-001",
+            "coach-a",
+            "  ",
+            "retry-guidance",
+            "Do not retry validation errors.",
+            "Two runs.",
+            "target agent id must not be blank",
+        ),
+        (
+            "reflection-001",
+            "coach-a",
+            "agent-a",
+            "  ",
+            "Do not retry validation errors.",
+            "Two runs.",
+            "target identity must not be blank",
+        ),
+        (
+            "reflection-001",
+            "coach-a",
+            "agent-a",
+            "retry-guidance",
+            "  ",
+            "Two runs.",
+            "replacement text must not be blank",
+        ),
+        (
+            "reflection-001",
+            "coach-a",
+            "agent-a",
+            "retry-guidance",
+            "Do not retry validation errors.",
+            "  ",
+            "proposal rationale must not be blank",
+        ),
     ),
 )
 def test_proposal_rejects_blank_required_text(

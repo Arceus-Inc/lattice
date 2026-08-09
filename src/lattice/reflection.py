@@ -104,6 +104,11 @@ class ReflectionProposal:
             raise ValueError("target identity must not be blank")
         if self.target_agent_id.strip() == self.proposing_coach_id.strip():
             raise ValueError("reflection proposal must not target the proposing coach")
+        if any(
+            item.episode.employee_id != self.target_agent_id
+            for item in self.evidence_cluster.evidence
+        ):
+            raise ValueError("reflection proposal evidence must belong to the target agent")
         if not self.replacement_text.strip():
             raise ValueError("replacement text must not be blank")
         if len(self.replacement_text) > _replacement_text_limit(self.target_kind):
@@ -131,10 +136,14 @@ def cluster_reflection_evidence(
             continue
         categories.append(item.failure_category)
         supporting = tuple(
-            candidate for candidate in evidence if candidate.failure_category == item.failure_category
+            candidate
+            for candidate in evidence
+            if candidate.failure_category == item.failure_category
         )
         if len(supporting) >= 2:
-            clusters.append(ReflectionCluster(failure_category=item.failure_category, evidence=supporting))
+            clusters.append(
+                ReflectionCluster(failure_category=item.failure_category, evidence=supporting)
+            )
     return tuple(clusters)
 
 
