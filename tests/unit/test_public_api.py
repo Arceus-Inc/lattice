@@ -16,4 +16,6 @@ def test_public_exports() -> None:
     assert hasattr(lattice, "FailureCategory")
     assert hasattr(lattice, "TrajectoryEvidence")
     assert hasattr(lattice, "ReflectionCluster")
+    assert hasattr(lattice, "ReflectionProposal")
+    assert hasattr(lattice, "ReflectionTargetKind")
     assert hasattr(lattice, "cluster_reflection_evidence")

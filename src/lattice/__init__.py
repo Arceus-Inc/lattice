@@ -16,6 +16,8 @@ from lattice.facade import Lattice
 from lattice.reflection import (
     FailureCategory,
     ReflectionCluster,
+    ReflectionProposal,
+    ReflectionTargetKind,
     TrajectoryEvidence,
     cluster_reflection_evidence,
 )
@@ -31,6 +33,8 @@ __all__ = [
     "PatternDraft",
     "Proposal",
     "ReflectionCluster",
+    "ReflectionProposal",
+    "ReflectionTargetKind",
     "TrajectoryEvidence",
     "ValidationResult",
     "cluster_reflection_evidence",
