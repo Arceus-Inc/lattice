@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from lattice.contracts.applied import (
     AppliedAtomEdge,
+    AppliedBeatOutcome,
     AppliedEdgeConflictError,
     AppliedEdgeStore,
     LandedOutcomePhase,
@@ -12,9 +13,17 @@ from lattice.contracts.atom import Atom, AtomHitReader, AtomStore, ContextAtomHi
 from lattice.contracts.cursor import ConsolidationWatermark, CursorConflictError, CursorStore
 from lattice.contracts.episodic import EpisodicReader, RawEpisode
 from lattice.contracts.patch import PatchStore, SkillDraft, SkillPatch
+from lattice.contracts.selection import (
+    ContextAtomSelection,
+    ContextSelectionCaptureOutcome,
+    ContextSelectionConflictError,
+    ContextSelectionJournal,
+    ContextSelectionSnapshot,
+)
 
 __all__ = [
     "AppliedAtomEdge",
+    "AppliedBeatOutcome",
     "AppliedEdgeConflictError",
     "AppliedEdgeStore",
     "Atom",
@@ -22,6 +31,11 @@ __all__ = [
     "AtomStore",
     "ConsolidationWatermark",
     "ContextAtomHit",
+    "ContextAtomSelection",
+    "ContextSelectionCaptureOutcome",
+    "ContextSelectionConflictError",
+    "ContextSelectionJournal",
+    "ContextSelectionSnapshot",
     "CursorConflictError",
     "CursorStore",
     "EpisodicReader",

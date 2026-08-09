@@ -7,10 +7,19 @@ from pathlib import Path
 
 import pytest
 
-from lattice.contracts.applied import AppliedAtomEdge, LandedOutcomePhase
+from lattice.contracts.applied import AppliedAtomEdge, AppliedBeatOutcome, LandedOutcomePhase
 from lattice.contracts.atom import Atom, ContextAtomHit
 from lattice.contracts.episodic import RawEpisode
-from lattice.domain.result import AppliedContextResult, ContextResult
+from lattice.contracts.selection import (
+    ContextAtomSelection,
+    ContextSelectionCaptureOutcome,
+    ContextSelectionSnapshot,
+)
+from lattice.domain.result import (
+    AppliedContextResult,
+    ContextResult,
+    ContextSelectionCaptureResult,
+)
 from lattice.facade import Lattice
 from lattice.semantic.retrieve import context_result, render_context, top_k, top_k_hits
 from lattice.stores import JsonCursorStore, MemoryMdStore
@@ -43,12 +52,57 @@ class _RecordingAppliedEdges:
         self.batches.append(edges)
         return edges
 
+    def seal(
+        self,
+        outcome: AppliedBeatOutcome,
+        edges: tuple[AppliedAtomEdge, ...],
+    ) -> tuple[AppliedAtomEdge, ...]:
+        self.batches.append(edges)
+        return edges
+
     def list_for_run(self, employee_id: str, beat_run_id: str) -> tuple[AppliedAtomEdge, ...]:
         return tuple(
             edge
             for batch in self.batches
             for edge in batch
             if edge.employee_id == employee_id and edge.beat_run_id == beat_run_id
+        )
+
+
+class _RecordingContextSelections:
+    def __init__(self) -> None:
+        self.selections: tuple[ContextAtomSelection, ...] = ()
+        self.complete = True
+        self.snapshots: list[ContextSelectionSnapshot] = []
+
+    def capture(
+        self,
+        snapshot: ContextSelectionSnapshot,
+    ) -> ContextSelectionCaptureOutcome:
+        self.snapshots.append(snapshot)
+        self.selections = tuple(
+            sorted(
+                {*self.selections, *snapshot.selections},
+                key=lambda selection: (selection.key, selection.revision),
+            )
+        )
+        self.complete = self.complete and snapshot.complete
+        return ContextSelectionCaptureOutcome(
+            employee_id=snapshot.employee_id,
+            beat_run_id=snapshot.beat_run_id,
+            selections=self.selections,
+            complete=self.complete,
+        )
+
+    def list_for_run(
+        self,
+        employee_id: str,
+        beat_run_id: str,
+    ) -> tuple[ContextAtomSelection, ...]:
+        return tuple(
+            selection
+            for selection in self.selections
+            if selection.employee_id == employee_id and selection.beat_run_id == beat_run_id
         )
 
 
@@ -72,6 +126,11 @@ def test_file_context_result_has_honest_unversioned_hit(tmp_path: Path) -> None:
     assert result.hits[0].key == "api.retry"
     assert result.hits[0].revision is None
     assert lattice.context("e1", "retry") == result.markdown
+    assert lattice.capture_context_selection("e1", result, beat_run_id="beat-1") == (
+        ContextSelectionCaptureResult(False, (), result.hits)
+    )
+    with pytest.raises(RuntimeError, match="no durable context selection journal"):
+        lattice.context_selection_for_run("e1", "beat-1")
 
     recorded = lattice.record_landed_context(
         "e1",
@@ -99,25 +158,19 @@ def test_record_landed_context_persists_exact_revisioned_hits_in_one_batch(tmp_p
         source_run_ids=("r2",),
         created_at=datetime(2026, 8, 9, tzinfo=UTC),
     )
-    legacy = Atom(
-        key="api.legacy",
-        value="Legacy file-backed memory has no persisted revision",
-        employee_id="e1",
-        source_run_ids=("r3",),
-        created_at=datetime(2026, 8, 9, tzinfo=UTC),
-    )
     retry_hit = ContextAtomHit(employee_id="e1", key="api.retry", revision=3, atom=retry)
     timeout_hit = ContextAtomHit(employee_id="e1", key="api.timeout", revision=4, atom=timeout)
-    legacy_hit = ContextAtomHit(employee_id="e1", key="api.legacy", revision=None, atom=legacy)
     applied_edges = _RecordingAppliedEdges()
+    context_selections = _RecordingContextSelections()
     lattice = Lattice(
         episodes=_Reader(),
         cursor=JsonCursorStore(tmp_path),
         atoms=MemoryMdStore(tmp_path),
         applied_edges=applied_edges,
+        context_selections=context_selections,
     )
 
-    context = ContextResult(markdown="", hits=(retry_hit, timeout_hit, legacy_hit))
+    context = ContextResult(markdown="", hits=(retry_hit, timeout_hit))
     result = lattice.record_landed_context(
         "e1",
         context,
@@ -142,8 +195,67 @@ def test_record_landed_context_persists_exact_revisioned_hits_in_one_batch(tmp_p
         outcome_phase=LandedOutcomePhase.TERMINAL_FAIL,
         landed_at=datetime(2026, 8, 10, tzinfo=UTC),
     )
-    assert result == AppliedContextResult((expected_retry, expected_timeout), (legacy_hit,))
+    assert result == AppliedContextResult((expected_retry, expected_timeout), ())
     assert applied_edges.batches == [(expected_retry, expected_timeout)]
+    assert context_selections.snapshots == [
+        ContextSelectionSnapshot(
+            employee_id="e1",
+            beat_run_id="beat-1",
+            selections=(
+                ContextAtomSelection("e1", "beat-1", "api.retry", 3),
+                ContextAtomSelection("e1", "beat-1", "api.timeout", 4),
+            ),
+            complete=True,
+        )
+    ]
+
+
+def test_mixed_landed_context_is_captured_incomplete_and_not_sealed(tmp_path: Path) -> None:
+    versioned_atom = Atom(
+        key="api.retry",
+        value="Retry with backoff",
+        employee_id="e1",
+        source_run_ids=("r1",),
+        created_at=datetime(2026, 8, 9, tzinfo=UTC),
+    )
+    legacy_atom = Atom(
+        key="api.legacy",
+        value="Legacy memory",
+        employee_id="e1",
+        source_run_ids=("r2",),
+        created_at=datetime(2026, 8, 9, tzinfo=UTC),
+    )
+    context = ContextResult(
+        markdown="",
+        hits=(
+            ContextAtomHit("e1", "api.retry", 3, versioned_atom),
+            ContextAtomHit("e1", "api.legacy", None, legacy_atom),
+        ),
+    )
+    applied_edges = _RecordingAppliedEdges()
+    context_selections = _RecordingContextSelections()
+    lattice = Lattice(
+        episodes=_Reader(),
+        cursor=JsonCursorStore(tmp_path),
+        atoms=MemoryMdStore(tmp_path),
+        applied_edges=applied_edges,
+        context_selections=context_selections,
+    )
+
+    with pytest.raises(RuntimeError, match="cannot be sealed"):
+        lattice.record_landed_context(
+            "e1",
+            context,
+            beat_run_id="beat-mixed",
+            outcome_phase=LandedOutcomePhase.TERMINAL_FAIL,
+            landed_at=datetime(2026, 8, 10, tzinfo=UTC),
+        )
+
+    assert applied_edges.batches == []
+    assert context_selections.snapshots[0].complete is False
+    assert context_selections.snapshots[0].selections == (
+        ContextAtomSelection("e1", "beat-mixed", "api.retry", 3),
+    )
 
 
 def test_record_landed_context_requires_a_store_for_revisioned_hits(tmp_path: Path) -> None:

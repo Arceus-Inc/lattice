@@ -11,7 +11,13 @@ from uuid import UUID
 import psycopg
 from psycopg.rows import tuple_row
 
-from lattice.contracts.applied import AppliedAtomEdge, AppliedEdgeConflictError, LandedOutcomePhase
+from lattice.contracts.applied import (
+    AppliedAtomEdge,
+    AppliedBeatOutcome,
+    AppliedEdgeConflictError,
+    LandedOutcomePhase,
+)
+from lattice.stores._postgres_beat_lock import lock_beat
 
 
 class PostgresAppliedEdgeStore:
@@ -60,9 +66,38 @@ class PostgresAppliedEdgeStore:
         if not canonical:
             return ()
         first = canonical[0]
+        return self.seal(
+            AppliedBeatOutcome(
+                employee_id=first.employee_id,
+                beat_run_id=first.beat_run_id,
+                outcome_phase=first.outcome_phase,
+                landed_at=first.landed_at,
+            ),
+            canonical,
+        )
+
+    def seal(
+        self,
+        outcome: AppliedBeatOutcome,
+        edges: tuple[AppliedAtomEdge, ...],
+    ) -> tuple[AppliedAtomEdge, ...]:
+        canonical = _validate_complete_batch(edges)
+        if any(
+            (edge.employee_id, edge.beat_run_id, edge.outcome_phase, edge.landed_at)
+            != (
+                outcome.employee_id,
+                outcome.beat_run_id,
+                outcome.outcome_phase,
+                outcome.landed_at,
+            )
+            for edge in canonical
+        ):
+            raise AppliedEdgeConflictError("APPLIED edges must match their beat outcome identity")
         digest = _selected_digest(canonical)
         with self._connection.transaction():
-            self._record_header(first, selected_count=len(canonical), selected_digest=digest)
+            lock_beat(self._connection, outcome.employee_id, outcome.beat_run_id)
+            self._require_exact_journal(outcome, canonical)
+            self._record_header(outcome, selected_count=len(canonical), selected_digest=digest)
             for edge in canonical:
                 self._record_one(edge)
         return canonical
@@ -86,9 +121,45 @@ class PostgresAppliedEdgeStore:
             for row in rows
         )
 
+    def _require_exact_journal(
+        self,
+        outcome: AppliedBeatOutcome,
+        edges: tuple[AppliedAtomEdge, ...],
+    ) -> None:
+        header = self._connection.execute(
+            "SELECT selected_count, selected_digest, complete "
+            "FROM lattice_context_selection_beat "
+            "WHERE employee_id = %s AND beat_run_id = %s FOR SHARE",
+            (outcome.employee_id, outcome.beat_run_id),
+        ).fetchone()
+        expected_header = (len(edges), _selected_digest(edges), True)
+        if header is None or (
+            _as_nonnegative_int(header[0], "selected_count"),
+            _as_bytes(header[1], "selected_digest"),
+            _as_bool(header[2], "complete"),
+        ) != expected_header:
+            raise AppliedEdgeConflictError(
+                f"APPLIED beat {outcome.employee_id!r}/{outcome.beat_run_id!r} "
+                "requires a complete durable context selection capture"
+            )
+        rows = self._connection.execute(
+            "SELECT key, revision FROM lattice_context_atom_selection "
+            "WHERE employee_id = %s AND beat_run_id = %s ORDER BY key FOR SHARE",
+            (outcome.employee_id, outcome.beat_run_id),
+        ).fetchall()
+        persisted = tuple(
+            (_as_text(row[0], "key"), _as_positive_int(row[1], "revision")) for row in rows
+        )
+        requested = tuple((edge.key, edge.revision) for edge in edges)
+        if persisted != requested:
+            raise AppliedEdgeConflictError(
+                f"APPLIED beat {outcome.employee_id!r}/{outcome.beat_run_id!r} "
+                "does not match its durable context selection journal"
+            )
+
     def _record_header(
         self,
-        edge: AppliedAtomEdge,
+        outcome: AppliedBeatOutcome,
         *,
         selected_count: int,
         selected_digest: bytes,
@@ -100,10 +171,10 @@ class PostgresAppliedEdgeStore:
             "ON CONFLICT DO NOTHING "
             "RETURNING selected_count",
             (
-                edge.employee_id,
-                edge.beat_run_id,
-                edge.outcome_phase.value,
-                edge.landed_at,
+                outcome.employee_id,
+                outcome.beat_run_id,
+                outcome.outcome_phase.value,
+                outcome.landed_at,
                 selected_count,
                 selected_digest,
             ),
@@ -113,20 +184,25 @@ class PostgresAppliedEdgeStore:
         existing = self._connection.execute(
             "SELECT outcome_phase, landed_at, selected_count, selected_digest "
             "FROM lattice_atom_applied_beat WHERE employee_id = %s AND beat_run_id = %s FOR UPDATE",
-            (edge.employee_id, edge.beat_run_id),
+            (outcome.employee_id, outcome.beat_run_id),
         ).fetchone()
         if existing is None:
             raise RuntimeError("APPLIED beat insert did not return a persisted header")
         persisted = (
             LandedOutcomePhase(_as_text(existing[0], "outcome_phase")),
             _as_datetime(existing[1], "landed_at"),
-            _as_positive_int(existing[2], "selected_count"),
+            _as_nonnegative_int(existing[2], "selected_count"),
             _as_bytes(existing[3], "selected_digest"),
         )
-        requested = (edge.outcome_phase, edge.landed_at, selected_count, selected_digest)
+        requested = (
+            outcome.outcome_phase,
+            outcome.landed_at,
+            selected_count,
+            selected_digest,
+        )
         if persisted != requested:
             raise AppliedEdgeConflictError(
-                f"APPLIED beat {edge.employee_id!r}/{edge.beat_run_id!r} "
+                f"APPLIED beat {outcome.employee_id!r}/{outcome.beat_run_id!r} "
                 "already has a different selected set or outcome"
             )
 
@@ -177,6 +253,12 @@ def _as_positive_int(value: object, column: str) -> int:
     raise TypeError(f"{column} must be a positive integer")
 
 
+def _as_nonnegative_int(value: object, column: str) -> int:
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    raise TypeError(f"{column} must be a non-negative integer")
+
+
 def _as_datetime(value: object, column: str) -> datetime:
     if not isinstance(value, datetime):
         raise TypeError(f"{column} must be a datetime")
@@ -186,6 +268,12 @@ def _as_datetime(value: object, column: str) -> datetime:
 def _as_bytes(value: object, column: str) -> bytes:
     if not isinstance(value, bytes):
         raise TypeError(f"{column} must be bytes")
+    return value
+
+
+def _as_bool(value: object, column: str) -> bool:
+    if not isinstance(value, bool):
+        raise TypeError(f"{column} must be boolean")
     return value
 
 

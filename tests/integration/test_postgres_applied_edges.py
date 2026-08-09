@@ -14,9 +14,11 @@ from tests.integration.conftest import _GrowingReader, app_role_conninfo
 
 from lattice.contracts.applied import AppliedAtomEdge, AppliedEdgeConflictError, LandedOutcomePhase
 from lattice.contracts.atom import Atom, ContextAtomHit
+from lattice.contracts.selection import ContextAtomSelection
 from lattice.stores.postgres import PostgresLatticeStore
 from lattice.stores.postgres_applied_edges import PostgresAppliedEdgeStore
 from lattice.stores.postgres_atoms import PostgresAtomStore
+from lattice.stores.postgres_context_selections import PostgresContextSelectionJournal
 
 
 def _atom(*, key: str = "api.retry", value: str = "retry with capped exponential backoff") -> Atom:
@@ -48,6 +50,24 @@ def _edge(
     )
 
 
+def _selection(edge: AppliedAtomEdge) -> ContextAtomSelection:
+    return ContextAtomSelection(
+        employee_id=edge.employee_id,
+        beat_run_id=edge.beat_run_id,
+        key=edge.key,
+        revision=edge.revision,
+    )
+
+
+def _capture(
+    conninfo: str,
+    company_id: uuid.UUID,
+    edges: tuple[AppliedAtomEdge, ...],
+) -> None:
+    with PostgresContextSelectionJournal.open(conninfo, company_id=company_id) as selections:
+        selections.append_all(tuple(_selection(edge) for edge in edges))
+
+
 def test_postgres_applied_edges_survive_restart_and_allow_multiple_atoms_per_beat(
     pg_database: str,
 ) -> None:
@@ -57,6 +77,7 @@ def test_postgres_applied_edges_survive_restart_and_allow_multiple_atoms_per_bea
         atoms.write(_atom(key="api.timeout"))
         retry_hit, timeout_hit = atoms.list_active_hits("agent-1")
     expected = (_edge(retry_hit), _edge(timeout_hit))
+    _capture(pg_database, company_id, expected)
     with PostgresAppliedEdgeStore.open(pg_database, company_id=company_id) as edges:
         assert edges.record_all(tuple(reversed(expected))) == expected
         assert edges.list_for_run("agent-1", "run-landing") == expected
@@ -75,6 +96,7 @@ def test_postgres_applied_edges_round_trip_terminal_failure(pg_database: str) ->
             outcome_phase=LandedOutcomePhase.TERMINAL_FAIL,
         )
     with PostgresAppliedEdgeStore.open(pg_database, company_id=company_id) as edges:
+        _capture(pg_database, company_id, (edge,))
         edges.record(edge)
         assert edges.list_for_run("agent-1", "run-failure") == (edge,)
 
@@ -87,6 +109,7 @@ def test_postgres_applied_edge_replay_is_idempotent_and_conflicts_on_different_o
         atoms.write(_atom())
         edge = _edge(atoms.list_active_hits("agent-1")[0])
     with PostgresAppliedEdgeStore.open(pg_database, company_id=company_id) as edges:
+        _capture(pg_database, company_id, (edge,))
         assert edges.record_all((edge,)) == (edge,)
         assert edges.record_all((edge,)) == (edge,)
         conflicting = AppliedAtomEdge(
@@ -111,6 +134,7 @@ def test_postgres_applied_beat_rejects_subset_and_superset_replays(pg_database: 
         circuit_hit, retry_hit, timeout_hit = atoms.list_active_hits("agent-1")
     original = (_edge(retry_hit), _edge(timeout_hit))
     superset = (_edge(circuit_hit), *original)
+    _capture(pg_database, company_id, original)
     with PostgresAppliedEdgeStore.open(pg_database, company_id=company_id) as edges:
         assert edges.record_all(original) == original
         with pytest.raises(AppliedEdgeConflictError):
@@ -155,6 +179,7 @@ def test_postgres_applied_beat_serializes_concurrent_conflicting_replays(
         retry_hit, timeout_hit = atoms.list_active_hits("agent-1")
     subset = (_edge(retry_hit),)
     superset = (*subset, _edge(timeout_hit))
+    _capture(pg_database, company_id, subset)
     barrier = Barrier(2)
     with (
         PostgresAppliedEdgeStore.open(pg_database, company_id=company_id) as first,
@@ -165,10 +190,10 @@ def test_postgres_applied_beat_serializes_concurrent_conflicting_replays(
         second_result = executor.submit(_record_after_barrier, second, superset, barrier)
         assert sorted((first_result.result(), second_result.result())) == ["conflict", "stored"]
         persisted = first.list_for_run("agent-1", "run-landing")
-        assert persisted in (subset, superset)
+        assert persisted == subset
 
 
-def test_postgres_applied_edge_batch_rolls_back_when_any_edge_cannot_be_persisted(
+def test_postgres_applied_edge_batch_rolls_back_when_it_diverges_from_the_journal(
     pg_database: str,
 ) -> None:
     company_id = uuid.uuid4()
@@ -183,8 +208,9 @@ def test_postgres_applied_edge_batch_rolls_back_when_any_edge_cannot_be_persiste
         outcome_phase=edge.outcome_phase,
         landed_at=edge.landed_at,
     )
+    _capture(pg_database, company_id, (edge,))
     with PostgresAppliedEdgeStore.open(pg_database, company_id=company_id) as edges:
-        with pytest.raises(ForeignKeyViolation):
+        with pytest.raises(AppliedEdgeConflictError):
             edges.record_all((edge, invalid))
         assert edges.list_for_run("agent-1", "run-landing") == ()
 
@@ -202,34 +228,37 @@ def test_canonical_postgres_composition_records_revisioned_context_across_restar
 
         assert len(context.hits) == 1
         assert context.hits[0].revision == 1
-        recorded = lattice.record_landed_context(
+        capture = lattice.capture_context_selection(
             "agent-1",
             context,
             beat_run_id="run-canonical",
-            outcome_phase=LandedOutcomePhase.NEEDS_REWORK,
-            landed_at=landed_at,
         )
-        assert recorded.skipped_unversioned_hits == ()
-        assert store.applied_edges.list_for_run("agent-1", "run-canonical") == recorded.edges
+        assert capture.durable is True
+        assert store.applied_edges.list_for_run("agent-1", "run-canonical") == ()
 
     with PostgresLatticeStore.open(pg_database, company_id=company_id) as restarted:
         lattice = restarted.build_lattice(episodes=_GrowingReader([]))
         assert lattice.context_result("agent-1", "retry").hits[0].revision == 1
-        assert restarted.applied_edges.list_for_run("agent-1", "run-canonical") == recorded.edges
+        assert lattice.context_selection_for_run("agent-1", "run-canonical") == capture.selections
+        recorded = lattice.record_landed_selection(
+            "agent-1",
+            "run-canonical",
+            outcome_phase=LandedOutcomePhase.NEEDS_REWORK,
+            landed_at=landed_at,
+        )
+        assert restarted.applied_edges.list_for_run("agent-1", "run-canonical") == recorded
 
 
-def test_postgres_applied_edge_requires_an_exact_atom_revision(pg_database: str) -> None:
-    edge = AppliedAtomEdge(
+def test_postgres_context_selection_requires_an_exact_atom_revision(pg_database: str) -> None:
+    selection = ContextAtomSelection(
         employee_id="agent-1",
         key="api.retry",
         revision=1,
         beat_run_id="run-landing",
-        outcome_phase=LandedOutcomePhase.TERMINAL_PASS,
-        landed_at=datetime(2026, 8, 10, tzinfo=UTC),
     )
-    with PostgresAppliedEdgeStore.open(pg_database, company_id=uuid.uuid4()) as edges:
+    with PostgresContextSelectionJournal.open(pg_database, company_id=uuid.uuid4()) as selections:
         with pytest.raises(ForeignKeyViolation):
-            edges.record(edge)
+            selections.append_all((selection,))
 
 
 def test_applied_edge_requires_a_timezone_aware_utc_landed_at() -> None:
@@ -264,6 +293,7 @@ def test_postgres_applied_edges_remain_valid_after_atom_invalidation(pg_database
     with PostgresAtomStore.open(pg_database, company_id=company_id) as atoms:
         atoms.write(atom)
         edge = _edge(atoms.list_active_hits("agent-1")[0])
+        _capture(pg_database, company_id, (edge,))
         atoms.invalidate("agent-1", "api.retry", at=datetime(2026, 8, 11, tzinfo=UTC))
     with PostgresAppliedEdgeStore.open(pg_database, company_id=company_id) as edges:
         edges.record(edge)
@@ -281,6 +311,8 @@ def test_postgres_applied_edges_obey_company_force_rls(pg_database: str) -> None
         atoms_b.write(_atom(value="company b"))
         edge_a = _edge(atoms_a.list_active_hits("agent-1")[0])
         edge_b = _edge(atoms_b.list_active_hits("agent-1")[0])
+    _capture(app_conninfo, company_a, (edge_a,))
+    _capture(app_conninfo, company_b, (edge_b,))
     with (
         PostgresAppliedEdgeStore.open(app_conninfo, company_id=company_a) as edges_a,
         PostgresAppliedEdgeStore.open(app_conninfo, company_id=company_b) as edges_b,
@@ -299,6 +331,7 @@ def test_postgres_applied_edges_reject_update_and_delete_for_the_runtime_role(
     with PostgresAtomStore.open(app_conninfo, company_id=company_id) as atoms:
         atoms.write(_atom())
         edge = _edge(atoms.list_active_hits("agent-1")[0])
+    _capture(app_conninfo, company_id, (edge,))
     with PostgresAppliedEdgeStore.open(app_conninfo, company_id=company_id) as edges:
         edges.record(edge)
 

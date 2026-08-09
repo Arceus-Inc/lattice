@@ -5,6 +5,7 @@ from __future__ import annotations
 from lattice.domain import (
     AppliedContextResult,
     ApplyResult,
+    ContextSelectionCaptureResult,
     HabitAction,
     HabitDraft,
     HintKind,
@@ -18,6 +19,7 @@ from lattice.facade import Lattice
 __all__ = [
     "AppliedContextResult",
     "ApplyResult",
+    "ContextSelectionCaptureResult",
     "HabitAction",
     "HabitDraft",
     "HintKind",

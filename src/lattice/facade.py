@@ -10,11 +10,21 @@ from pathlib import Path
 from lattice.consolidate.apply import apply_proposal
 from lattice.consolidate.cluster import build_hints, cluster, gate_open, new_episodes, rank
 from lattice.consolidate.validate import validate_proposal
-from lattice.contracts.applied import AppliedAtomEdge, AppliedEdgeStore, LandedOutcomePhase
+from lattice.contracts.applied import (
+    AppliedAtomEdge,
+    AppliedBeatOutcome,
+    AppliedEdgeStore,
+    LandedOutcomePhase,
+)
 from lattice.contracts.atom import Atom, AtomHitReader, AtomStore, ContextAtomHit
 from lattice.contracts.cursor import CursorStore
 from lattice.contracts.episodic import EpisodicReader
 from lattice.contracts.patch import PatchStore
+from lattice.contracts.selection import (
+    ContextAtomSelection,
+    ContextSelectionJournal,
+    ContextSelectionSnapshot,
+)
 from lattice.directive import (
     DEFAULT_MIN_CLUSTER_SIZE,
     DEFAULT_MIN_NEW_EPISODES,
@@ -28,6 +38,7 @@ from lattice.domain.result import (
     AppliedContextResult,
     ApplyResult,
     ContextResult,
+    ContextSelectionCaptureResult,
     ForgetResult,
     ValidationResult,
 )
@@ -54,6 +65,7 @@ class Lattice:
         apply_scope: Callable[[str], AbstractContextManager[None]] | None = None,
         atom_hits: AtomHitReader | None = None,
         applied_edges: AppliedEdgeStore | None = None,
+        context_selections: ContextSelectionJournal | None = None,
     ) -> None:
         self._episodes = episodes
         self._cursor = cursor
@@ -67,6 +79,7 @@ class Lattice:
         self._apply_scope = apply_scope or _legacy_apply_scope
         self._atom_hits = atom_hits
         self._applied_edges = applied_edges
+        self._context_selections = context_selections
 
     def gate_open(self, employee_id: str) -> bool:
         watermark = self._cursor.get(employee_id)
@@ -172,6 +185,81 @@ class Lattice:
         )
         return context_result(query, hits, k=k)
 
+    def capture_context_selection(
+        self,
+        employee_id: str,
+        context: ContextResult,
+        *,
+        beat_run_id: str,
+    ) -> ContextSelectionCaptureResult:
+        """Durably append exact revisions when context is shown during a beat."""
+        if any(hit.employee_id != employee_id for hit in context.hits):
+            raise ValueError("context hits must belong to the selecting employee")
+        revisioned_hits = tuple(hit for hit in context.hits if hit.revision is not None)
+        skipped = tuple(hit for hit in context.hits if hit.revision is None)
+        if self._context_selections is None:
+            if revisioned_hits:
+                raise RuntimeError("revisioned context requires a durable ContextSelectionJournal")
+            return ContextSelectionCaptureResult(False, (), skipped)
+        selections = tuple(
+            _selection_for_hit(hit, beat_run_id=beat_run_id) for hit in revisioned_hits
+        )
+        outcome = self._context_selections.capture(
+            ContextSelectionSnapshot(
+                employee_id=employee_id,
+                beat_run_id=beat_run_id,
+                selections=selections,
+                complete=not skipped,
+            )
+        )
+        return ContextSelectionCaptureResult(
+            durable=outcome.complete,
+            selections=outcome.selections,
+            skipped_unversioned_hits=skipped,
+        )
+
+    def context_selection_for_run(
+        self,
+        employee_id: str,
+        beat_run_id: str,
+    ) -> tuple[ContextAtomSelection, ...]:
+        """Recover exact durable revisions shown earlier in a beat."""
+        if self._context_selections is None:
+            raise RuntimeError("legacy file composition has no durable context selection journal")
+        return self._context_selections.list_for_run(employee_id, beat_run_id)
+
+    def record_landed_selection(
+        self,
+        employee_id: str,
+        beat_run_id: str,
+        *,
+        outcome_phase: LandedOutcomePhase,
+        landed_at: datetime,
+    ) -> tuple[AppliedAtomEdge, ...]:
+        """Seal and record the durable selected set, including after process restart."""
+        if self._applied_edges is None:
+            raise RuntimeError("recording durable selection requires an AppliedEdgeStore")
+        edges = tuple(
+            AppliedAtomEdge(
+                employee_id=selection.employee_id,
+                key=selection.key,
+                revision=selection.revision,
+                beat_run_id=selection.beat_run_id,
+                outcome_phase=outcome_phase,
+                landed_at=landed_at,
+            )
+            for selection in self.context_selection_for_run(employee_id, beat_run_id)
+        )
+        return self._applied_edges.seal(
+            AppliedBeatOutcome(
+                employee_id=employee_id,
+                beat_run_id=beat_run_id,
+                outcome_phase=outcome_phase,
+                landed_at=landed_at,
+            ),
+            edges,
+        )
+
     def record_landed_context(
         self,
         employee_id: str,
@@ -181,11 +269,36 @@ class Lattice:
         outcome_phase: LandedOutcomePhase,
         landed_at: datetime,
     ) -> AppliedContextResult:
-        """Persist all exact hits selected for one landed beat in one atomic edge batch."""
+        """Capture and seal all exact hits selected for one landed beat.
+
+        Durable compositions commit the capture first, so a crash before sealing leaves
+        restart-safe lineage and an exact retry is idempotent.
+        """
         if any(hit.employee_id != employee_id for hit in context.hits):
             raise ValueError("context hits must belong to the landed employee")
         revisioned_hits = tuple(hit for hit in context.hits if hit.revision is not None)
         skipped_unversioned_hits = tuple(hit for hit in context.hits if hit.revision is None)
+        if self._context_selections is not None:
+            capture = self.capture_context_selection(
+                employee_id,
+                context,
+                beat_run_id=beat_run_id,
+            )
+            if not capture.durable:
+                if revisioned_hits:
+                    raise RuntimeError(
+                        "landed context cannot be sealed when selected hits lack revisions"
+                    )
+                return AppliedContextResult((), skipped_unversioned_hits)
+            return AppliedContextResult(
+                edges=self.record_landed_selection(
+                    employee_id,
+                    beat_run_id,
+                    outcome_phase=outcome_phase,
+                    landed_at=landed_at,
+                ),
+                skipped_unversioned_hits=(),
+            )
         if not revisioned_hits:
             return AppliedContextResult((), skipped_unversioned_hits)
         if self._applied_edges is None:
@@ -256,4 +369,19 @@ def _landed_edge(
         beat_run_id=beat_run_id,
         outcome_phase=outcome_phase,
         landed_at=landed_at,
+    )
+
+
+def _selection_for_hit(
+    hit: ContextAtomHit,
+    *,
+    beat_run_id: str,
+) -> ContextAtomSelection:
+    if hit.revision is None:
+        raise ValueError("a durable context selection requires an exact atom revision")
+    return ContextAtomSelection(
+        employee_id=hit.employee_id,
+        beat_run_id=beat_run_id,
+        key=hit.key,
+        revision=hit.revision,
     )

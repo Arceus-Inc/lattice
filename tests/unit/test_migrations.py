@@ -14,6 +14,8 @@ def test_load_migrations_preserves_order_checksums_and_created_tables() -> None:
         "0001_postgres_atoms",
         "0002_postgres_consolidation_cursors",
         "0003_postgres_applied_atom_edges",
+        "0004_postgres_context_selection_journal",
+        "0005_postgres_context_selection_headers",
     ]
     assert [migration.table_names() for migration in migrations] == [
         [
@@ -26,6 +28,8 @@ def test_load_migrations_preserves_order_checksums_and_created_tables() -> None:
         ],
         ["lattice_consolidation_cursor"],
         ["lattice_atom_applied_beat", "lattice_atom_applied_edge"],
+        ["lattice_context_atom_selection"],
+        ["lattice_context_selection_beat"],
     ]
     assert [migration.checksum for migration in migrations] == [
         hashlib.sha256(migration.sql.encode("utf-8")).hexdigest() for migration in migrations

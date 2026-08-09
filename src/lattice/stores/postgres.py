@@ -18,6 +18,7 @@ from lattice.directive import DEFAULT_MIN_CLUSTER_SIZE, DEFAULT_MIN_NEW_EPISODES
 from lattice.facade import Lattice
 from lattice.stores.postgres_applied_edges import PostgresAppliedEdgeStore
 from lattice.stores.postgres_atoms import PostgresAtomStore
+from lattice.stores.postgres_context_selections import PostgresContextSelectionJournal
 from lattice.stores.postgres_cursor import PostgresCursorStore
 
 
@@ -29,6 +30,7 @@ class PostgresLatticeStore:
         self.atoms = PostgresAtomStore(connection, owns_connection=False)
         self.cursor = PostgresCursorStore(connection, owns_connection=False)
         self.applied_edges = PostgresAppliedEdgeStore(connection, owns_connection=False)
+        self.context_selections = PostgresContextSelectionJournal(connection, owns_connection=False)
 
     @classmethod
     def open(cls, conninfo: str, *, company_id: UUID) -> Self:
@@ -80,6 +82,7 @@ class PostgresLatticeStore:
             apply_scope=self.apply_scope,
             atom_hits=self.atoms,
             applied_edges=self.applied_edges,
+            context_selections=self.context_selections,
         )
 
     @contextmanager

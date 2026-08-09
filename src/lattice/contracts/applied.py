@@ -20,6 +20,20 @@ class LandedOutcomePhase(StrEnum):
 
 
 @dataclass(frozen=True)
+class AppliedBeatOutcome:
+    """The immutable outcome identity for one landed employee beat."""
+
+    employee_id: str
+    beat_run_id: str
+    outcome_phase: LandedOutcomePhase
+    landed_at: datetime
+
+    def __post_init__(self) -> None:
+        if self.landed_at.tzinfo is None or self.landed_at.utcoffset() != timedelta(0):
+            raise ValueError("landed_at must be timezone-aware UTC")
+
+
+@dataclass(frozen=True)
 class AppliedAtomEdge:
     """One beat's outcome for one exact, retrieved Postgres atom revision."""
 
@@ -48,6 +62,14 @@ class AppliedEdgeStore(Protocol):
 
     def record_all(self, edges: tuple[AppliedAtomEdge, ...]) -> tuple[AppliedAtomEdge, ...]:
         """Persist one beat's complete selected set atomically and idempotently."""
+        ...
+
+    def seal(
+        self,
+        outcome: AppliedBeatOutcome,
+        edges: tuple[AppliedAtomEdge, ...],
+    ) -> tuple[AppliedAtomEdge, ...]:
+        """Seal one complete selected set, including the empty set."""
         ...
 
     def list_for_run(self, employee_id: str, beat_run_id: str) -> tuple[AppliedAtomEdge, ...]: ...

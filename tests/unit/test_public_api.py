@@ -13,4 +13,5 @@ def test_public_exports() -> None:
     assert hasattr(lattice, "Packet")
     assert hasattr(lattice, "ApplyResult")
     assert hasattr(lattice, "AppliedContextResult")
+    assert hasattr(lattice, "ContextSelectionCaptureResult")
     assert hasattr(lattice, "ValidationResult")
