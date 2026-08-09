@@ -23,6 +23,10 @@ __all__ = [
     "ReflectionReview",
     "ReflectionRunRef",
     "ReflectionTargetKind",
+    "ReplayOutcome",
+    "ReplayResult",
+    "ReplaySeverity",
+    "RepresentativeSuccessEvidence",
     "ReviewDecision",
     "TrajectoryEvidence",
     "cluster_reflection_evidence",
@@ -42,6 +46,20 @@ class ReviewDecision(StrEnum):
 
     ACCEPTED = "accepted"
     REJECTED = "rejected"
+
+
+class ReplayOutcome(StrEnum):
+    """Caller-supplied result of replaying a representative success."""
+
+    PRESERVED = "preserved"
+    REGRESSED = "regressed"
+
+
+class ReplaySeverity(StrEnum):
+    """Caller-supplied severity of a replay outcome."""
+
+    NON_CRITICAL = "non_critical"
+    CRITICAL = "critical"
 
 
 @dataclass(frozen=True)
@@ -82,6 +100,47 @@ class TrajectoryEvidence:
             raise ValueError("trajectory reference must not be blank")
         if not self.observation.strip():
             raise ValueError("failure observation must not be blank")
+
+
+@dataclass(frozen=True)
+class RepresentativeSuccessEvidence:
+    """A caller-designated past success retained as replay provenance."""
+
+    episode: RawEpisode
+
+    def __post_init__(self) -> None:
+        if not self.episode.run_id.strip():
+            raise ValueError("representative success trajectory reference must not be blank")
+
+    @property
+    def trajectory_ref(self) -> str:
+        """Exact trajectory reference for this representative success."""
+        return self.episode.run_id
+
+
+@dataclass(frozen=True)
+class ReplayResult:
+    """A typed replay assessment for one representative success trajectory."""
+
+    evidence: RepresentativeSuccessEvidence
+    outcome: ReplayOutcome
+    severity: ReplaySeverity
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.outcome, ReplayOutcome):
+            raise ValueError("replay outcome must be a ReplayOutcome")
+        if not isinstance(self.severity, ReplaySeverity):
+            raise ValueError("replay severity must be a ReplaySeverity")
+
+    @property
+    def trajectory_ref(self) -> str:
+        """Exact representative success provenance used for this replay."""
+        return self.evidence.trajectory_ref
+
+    @property
+    def is_critical_regression(self) -> bool:
+        """Whether this caller-supplied assessment blocks authorization."""
+        return self.outcome is ReplayOutcome.REGRESSED and self.severity is ReplaySeverity.CRITICAL
 
 
 @dataclass(frozen=True)
@@ -204,12 +263,31 @@ class ApplicationAuthorization:
 
     review: ReflectionReview
     application_run: ReflectionRunRef
+    replay_results: tuple[ReplayResult, ...]
 
     def __post_init__(self) -> None:
         if self.review.decision is not ReviewDecision.ACCEPTED:
             raise ValueError("application authorization requires an accepted review")
         if self.application_run.sequence <= self.review.proposal.proposal_run.sequence:
             raise ValueError("application run must be later than the proposal run")
+        if not self.replay_results:
+            raise ValueError(
+                "application authorization requires at least one representative success replay result"
+            )
+        _reject_duplicate_replay_trajectory_refs(self.replay_results)
+        failure_refs = self.review.trajectory_refs
+        if any(result.trajectory_ref in failure_refs for result in self.replay_results):
+            raise ValueError(
+                "representative success trajectory reference must not duplicate proposal failure "
+                "trajectory reference"
+            )
+        target_agent_id = self.review.proposal.target_agent_id
+        if any(
+            result.evidence.episode.employee_id != target_agent_id for result in self.replay_results
+        ):
+            raise ValueError("representative success evidence must belong to the target agent")
+        if any(result.is_critical_regression for result in self.replay_results):
+            raise ValueError("critical replay regression blocks application authorization")
 
     @property
     def proposal(self) -> ReflectionProposal:
@@ -230,6 +308,11 @@ class ApplicationAuthorization:
     def trajectory_refs(self) -> tuple[str, ...]:
         """Exact evidence provenance retained by the accepted review."""
         return self.review.trajectory_refs
+
+    @property
+    def representative_success_refs(self) -> tuple[str, ...]:
+        """Exact replayed representative success provenance."""
+        return tuple(result.trajectory_ref for result in self.replay_results)
 
 
 def cluster_reflection_evidence(
@@ -261,6 +344,17 @@ def _reject_duplicate_trajectory_refs(evidence: tuple[TrajectoryEvidence, ...]) 
         reference = item.episode.run_id
         if reference in references:
             raise ValueError(f"duplicate trajectory reference: {reference!r}")
+        references.append(reference)
+
+
+def _reject_duplicate_replay_trajectory_refs(results: tuple[ReplayResult, ...]) -> None:
+    references: list[str] = []
+    for result in results:
+        reference = result.trajectory_ref
+        if reference in references:
+            raise ValueError(
+                f"duplicate representative success trajectory reference: {reference!r}"
+            )
         references.append(reference)
 
 

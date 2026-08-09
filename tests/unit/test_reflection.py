@@ -19,6 +19,10 @@ from lattice.reflection import (
     ReflectionReview,
     ReflectionRunRef,
     ReflectionTargetKind,
+    ReplayOutcome,
+    ReplayResult,
+    ReplaySeverity,
+    RepresentativeSuccessEvidence,
     ReviewDecision,
     TrajectoryEvidence,
     cluster_reflection_evidence,
@@ -177,6 +181,41 @@ def _review(
         ),
         reviewer_id=reviewer_id,
         decision=decision,
+    )
+
+
+def _representative_success(run_id: str = "success-run-1") -> RepresentativeSuccessEvidence:
+    return RepresentativeSuccessEvidence(episode=_episode(run_id))
+
+
+def _replay_results(
+    *,
+    outcome: ReplayOutcome = ReplayOutcome.PRESERVED,
+    severity: ReplaySeverity = ReplaySeverity.NON_CRITICAL,
+) -> tuple[ReplayResult, ...]:
+    return (
+        ReplayResult(
+            evidence=_representative_success(),
+            outcome=outcome,
+            severity=severity,
+        ),
+    )
+
+
+def _authorization(
+    *,
+    review: ReflectionReview | None = None,
+    application_run_id: str = "application-run",
+    application_run_sequence: int = 2,
+    replay_results: tuple[ReplayResult, ...] | None = None,
+) -> ApplicationAuthorization:
+    return ApplicationAuthorization(
+        review=review or _review(),
+        application_run=ReflectionRunRef(
+            run_id=application_run_id,
+            sequence=application_run_sequence,
+        ),
+        replay_results=replay_results or _replay_results(),
     )
 
 
@@ -354,16 +393,80 @@ def test_reflection_proposal_has_no_application_api() -> None:
 def test_accepted_human_review_mints_application_authorization_with_exact_provenance() -> None:
     proposal = _proposal()
     review = _review(proposal=proposal)
+    replay_results = _replay_results()
 
-    authorization = ApplicationAuthorization(
-        review=review,
-        application_run=ReflectionRunRef(run_id="application-run", sequence=2),
-    )
+    authorization = _authorization(review=review, replay_results=replay_results)
 
     assert authorization.review is review
     assert authorization.proposal is proposal
     assert authorization.proposal_run_id == "proposal-run"
     assert authorization.trajectory_refs == ("run-1", "run-2")
+    assert authorization.representative_success_refs == ("success-run-1",)
+    assert authorization.replay_results is replay_results
+
+
+def test_application_authorization_requires_representative_success_replay_results() -> None:
+    with pytest.raises(ValueError, match="at least one representative success replay result"):
+        ApplicationAuthorization(
+            review=_review(),
+            application_run=ReflectionRunRef(run_id="application-run", sequence=2),
+            replay_results=(),
+        )
+
+
+def test_application_authorization_rejects_duplicate_or_failure_replay_trajectory_references() -> (
+    None
+):
+    duplicate_results = (
+        ReplayResult(
+            evidence=_representative_success("success-run-1"),
+            outcome=ReplayOutcome.PRESERVED,
+            severity=ReplaySeverity.NON_CRITICAL,
+        ),
+        ReplayResult(
+            evidence=_representative_success("success-run-1"),
+            outcome=ReplayOutcome.PRESERVED,
+            severity=ReplaySeverity.NON_CRITICAL,
+        ),
+    )
+
+    with pytest.raises(ValueError, match="duplicate representative success trajectory reference"):
+        _authorization(replay_results=duplicate_results)
+    with pytest.raises(
+        ValueError, match="must not duplicate proposal failure trajectory reference"
+    ):
+        _authorization(
+            replay_results=(
+                ReplayResult(
+                    evidence=_representative_success("run-1"),
+                    outcome=ReplayOutcome.PRESERVED,
+                    severity=ReplaySeverity.NON_CRITICAL,
+                ),
+            )
+        )
+
+
+def test_critical_replay_regression_blocks_application_authorization() -> None:
+    with pytest.raises(ValueError, match="critical replay regression"):
+        _authorization(
+            replay_results=_replay_results(
+                outcome=ReplayOutcome.REGRESSED,
+                severity=ReplaySeverity.CRITICAL,
+            )
+        )
+
+
+def test_representative_success_evidence_must_belong_to_the_target_agent() -> None:
+    foreign_result = ReplayResult(
+        evidence=RepresentativeSuccessEvidence(
+            episode=_episode("foreign-success", employee_id="agent-b")
+        ),
+        outcome=ReplayOutcome.PRESERVED,
+        severity=ReplaySeverity.NON_CRITICAL,
+    )
+
+    with pytest.raises(ValueError, match="success evidence must belong to the target agent"):
+        _authorization(replay_results=(foreign_result,))
 
 
 def test_review_carries_a_visible_before_after_diff() -> None:
@@ -397,24 +500,19 @@ def test_rejected_review_cannot_mint_application_authorization() -> None:
     review = _review(decision=ReviewDecision.REJECTED)
 
     with pytest.raises(ValueError, match="requires an accepted review"):
-        ApplicationAuthorization(
-            review=review,
-            application_run=ReflectionRunRef(run_id="application-run", sequence=2),
-        )
+        _authorization(review=review)
 
 
 def test_application_authorization_requires_a_later_application_run() -> None:
     review = _review(proposal=_proposal(proposal_run_sequence=4))
 
     with pytest.raises(ValueError, match="must be later"):
-        ApplicationAuthorization(
-            review=review,
-            application_run=ReflectionRunRef(run_id="earlier-run", sequence=3),
-        )
+        _authorization(review=review, application_run_id="earlier-run", application_run_sequence=3)
     with pytest.raises(ValueError, match="must be later"):
-        ApplicationAuthorization(
+        _authorization(
             review=review,
-            application_run=ReflectionRunRef(run_id="same-order-run", sequence=4),
+            application_run_id="same-order-run",
+            application_run_sequence=4,
         )
 
 
@@ -435,21 +533,35 @@ def test_review_and_authorization_reject_blank_identities(
             _review(reviewer_id=reviewer_id)
     else:
         with pytest.raises(ValueError, match=message):
-            ApplicationAuthorization(
+            _authorization(
                 review=_review(reviewer_id=reviewer_id),
-                application_run=ReflectionRunRef(run_id=application_run_id, sequence=2),
+                application_run_id=application_run_id,
             )
 
 
 def test_review_and_authorization_are_immutable_and_have_no_application_api() -> None:
     review = _review()
     application_run = ReflectionRunRef(run_id="application-run", sequence=2)
-    authorization = ApplicationAuthorization(review=review, application_run=application_run)
+    representative_success = _representative_success()
+    replay_result = ReplayResult(
+        evidence=representative_success,
+        outcome=ReplayOutcome.PRESERVED,
+        severity=ReplaySeverity.NON_CRITICAL,
+    )
+    authorization = ApplicationAuthorization(
+        review=review,
+        application_run=application_run,
+        replay_results=(replay_result,),
+    )
 
     assert authorization.application_run is application_run
     with pytest.raises(AttributeError):
         review.reviewer_id = "different reviewer"  # type: ignore[misc]
     with pytest.raises(AttributeError):
         application_run.sequence = 3  # type: ignore[misc]
+    with pytest.raises(AttributeError):
+        representative_success.episode = _episode("other-success")  # type: ignore[misc]
+    with pytest.raises(AttributeError):
+        replay_result.outcome = ReplayOutcome.REGRESSED  # type: ignore[misc]
     assert not hasattr(ApplicationAuthorization, "apply")
     assert not hasattr(ApplicationAuthorization, "mutate")
