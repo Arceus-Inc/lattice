@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Protocol
 
 
 @dataclass(frozen=True)
@@ -14,3 +15,11 @@ class ConsolidationWatermark:
     last_run_id: str | None
     episodes_seen: int
     consolidated_at: datetime | None
+
+
+class CursorStore(Protocol):
+    """Persistence port for per-employee consolidation watermarks."""
+
+    def get(self, employee_id: str) -> ConsolidationWatermark: ...
+
+    def advance(self, employee_id: str, *, last_run_id: str, episodes_seen: int) -> None: ...

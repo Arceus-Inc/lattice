@@ -8,6 +8,7 @@ from lattice.consolidate.apply import apply_proposal
 from lattice.consolidate.cluster import build_hints, cluster, gate_open, new_episodes, rank
 from lattice.consolidate.validate import validate_proposal
 from lattice.contracts.atom import AtomStore
+from lattice.contracts.cursor import CursorStore
 from lattice.contracts.episodic import EpisodicReader
 from lattice.contracts.patch import PatchStore
 from lattice.directive import (
@@ -22,7 +23,6 @@ from lattice.domain.result import AdjudicateResult, ApplyResult, ForgetResult, V
 from lattice.semantic.adjudicate import adjudicate_atoms
 from lattice.semantic.forget import forget_employee
 from lattice.semantic.retrieve import render_context
-from lattice.stores.json_cursor import JsonCursorStore
 
 
 class Lattice:
@@ -32,7 +32,7 @@ class Lattice:
         self,
         *,
         episodes: EpisodicReader,
-        cursor: JsonCursorStore,
+        cursor: CursorStore,
         atoms: AtomStore,
         patches: PatchStore | None = None,
         min_new_episodes: int = DEFAULT_MIN_NEW_EPISODES,
