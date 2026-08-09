@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
 from datetime import datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -89,25 +91,51 @@ class MemoryMdStore:
 class MemoryMdView:
     """Derived ``MEMORY.md`` renderer over an authoritative atom store."""
 
-    def __init__(self, atoms: AtomStore, root: str | Path) -> None:
+    def __init__(
+        self,
+        atoms: AtomStore,
+        root: str | Path,
+        *,
+        transaction_scope: Callable[[str], AbstractContextManager[None]] | None = None,
+    ) -> None:
         self._atoms = atoms
         self._root = Path(root)
+        self._transaction_scope = transaction_scope
+        self._deferred_employee_id: str | None = None
 
     def list_active(self, employee_id: str) -> tuple[Atom, ...]:
         return self._atoms.list_active(employee_id)
 
     def write(self, atom: Atom) -> None:
         self._atoms.write(atom)
-        self.rewrite(atom.employee_id)
+        self._rewrite_if_immediate(atom.employee_id)
 
     def invalidate(self, employee_id: str, key: str, *, at: datetime) -> None:
         self._atoms.invalidate(employee_id, key, at=at)
+        self._rewrite_if_immediate(employee_id)
+
+    @contextmanager
+    def apply_scope(self, employee_id: str) -> Iterator[None]:
+        """Defer this employee's view until the supplied database scope commits."""
+        if self._transaction_scope is None:
+            yield
+            return
+        try:
+            with self._transaction_scope(employee_id):
+                self._deferred_employee_id = employee_id
+                yield
+        finally:
+            self._deferred_employee_id = None
         self.rewrite(employee_id)
 
     def rewrite(self, employee_id: str) -> None:
         employee_dir = self._root / assert_safe_store_id(employee_id)
         employee_dir.mkdir(parents=True, exist_ok=True)
         _atomic_write(employee_dir / "MEMORY.md", render_memory_md(self._atoms.list_active(employee_id)))
+
+    def _rewrite_if_immediate(self, employee_id: str) -> None:
+        if self._deferred_employee_id != employee_id:
+            self.rewrite(employee_id)
 
 
 def render_memory_md(active: tuple[Atom, ...]) -> str:
