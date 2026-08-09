@@ -11,10 +11,14 @@ from lattice.reflection import (
     MAX_AGENTS_MD_REPLACEMENT_CHARS,
     MAX_SKILL_REPLACEMENT_CHARS,
     MAX_TOOL_DESCRIPTION_REPLACEMENT_CHARS,
+    ApplicationAuthorization,
     FailureCategory,
     ReflectionCluster,
+    ReflectionDiff,
     ReflectionProposal,
+    ReflectionReview,
     ReflectionTargetKind,
+    ReviewDecision,
     TrajectoryEvidence,
     cluster_reflection_evidence,
 )
@@ -133,6 +137,7 @@ def _cluster() -> ReflectionCluster:
 
 def _proposal(
     *,
+    proposal_run_id: str = "proposal-run",
     target_agent_id: str = "agent-a",
     target_kind: ReflectionTargetKind = ReflectionTargetKind.SKILL,
     target_identity: str = "retry-guidance",
@@ -142,6 +147,7 @@ def _proposal(
 ) -> ReflectionProposal:
     return ReflectionProposal(
         proposal_id="reflection-001",
+        proposal_run_id=proposal_run_id,
         proposing_coach_id="coach-a",
         target_agent_id=target_agent_id,
         target_kind=target_kind,
@@ -152,12 +158,30 @@ def _proposal(
     )
 
 
+def _review(
+    *,
+    decision: ReviewDecision = ReviewDecision.ACCEPTED,
+    proposal: ReflectionProposal | None = None,
+    reviewer_id: str = "reviewer-a",
+) -> ReflectionReview:
+    return ReflectionReview(
+        proposal=proposal or _proposal(),
+        diff=ReflectionDiff(
+            before_text="Retry every failed request.",
+            after_text="Do not retry validation errors.",
+        ),
+        reviewer_id=reviewer_id,
+        decision=decision,
+    )
+
+
 def test_proposal_is_immutable_and_retains_exact_cluster_provenance() -> None:
     evidence_cluster = _cluster()
     proposal = _proposal(evidence_cluster=evidence_cluster)
 
     assert proposal.target_kind is ReflectionTargetKind.SKILL
     assert proposal.evidence_cluster is evidence_cluster
+    assert proposal.proposal_run_id == "proposal-run"
     assert proposal.trajectory_refs == ("run-1", "run-2")
     with pytest.raises(AttributeError):
         proposal.rationale = "different rationale"  # type: ignore[misc]
@@ -194,6 +218,7 @@ def test_proposal_requires_a_caller_supplied_target_kind() -> None:
     with pytest.raises(ValueError, match="target kind must be a ReflectionTargetKind"):
         ReflectionProposal(
             proposal_id="reflection-001",
+            proposal_run_id="proposal-run",
             proposing_coach_id="coach-a",
             target_agent_id="agent-a",
             target_kind="skill",  # type: ignore[arg-type]
@@ -300,6 +325,7 @@ def test_proposal_rejects_blank_required_text(
     with pytest.raises(ValueError, match=message):
         ReflectionProposal(
             proposal_id=proposal_id,
+            proposal_run_id="proposal-run",
             proposing_coach_id=proposing_coach_id,
             target_agent_id=target_agent_id,
             target_kind=ReflectionTargetKind.SKILL,
@@ -310,6 +336,94 @@ def test_proposal_rejects_blank_required_text(
         )
 
 
+def test_proposal_rejects_blank_proposal_run_id() -> None:
+    with pytest.raises(ValueError, match="proposal run id must not be blank"):
+        _proposal(proposal_run_id="  ")
+
+
 def test_reflection_proposal_has_no_application_api() -> None:
     assert not hasattr(ReflectionProposal, "apply")
     assert not hasattr(ReflectionProposal, "mutate")
+
+
+def test_accepted_human_review_mints_application_authorization_with_exact_provenance() -> None:
+    proposal = _proposal()
+    review = _review(proposal=proposal)
+
+    authorization = ApplicationAuthorization(review=review, application_run_id="application-run")
+
+    assert authorization.review is review
+    assert authorization.proposal is proposal
+    assert authorization.proposal_run_id == "proposal-run"
+    assert authorization.trajectory_refs == ("run-1", "run-2")
+
+
+def test_review_carries_a_visible_before_after_diff() -> None:
+    review = _review()
+
+    assert review.diff.before_text == "Retry every failed request."
+    assert review.diff.after_text == review.proposal.replacement_text
+
+
+def test_reflection_diff_rejects_an_unchanged_artifact() -> None:
+    with pytest.raises(ValueError, match="must show a change"):
+        ReflectionDiff(before_text="unchanged", after_text="unchanged")
+
+
+def test_review_rejects_a_diff_for_different_replacement_text() -> None:
+    with pytest.raises(ValueError, match="must match the proposal replacement text"):
+        ReflectionReview(
+            proposal=_proposal(),
+            diff=ReflectionDiff(before_text="Before", after_text="Different proposal"),
+            reviewer_id="reviewer-a",
+            decision=ReviewDecision.ACCEPTED,
+        )
+
+
+def test_rejected_review_cannot_mint_application_authorization() -> None:
+    review = _review(decision=ReviewDecision.REJECTED)
+
+    with pytest.raises(ValueError, match="requires an accepted review"):
+        ApplicationAuthorization(review=review, application_run_id="application-run")
+
+
+def test_application_authorization_rejects_same_proposal_and_application_run() -> None:
+    review = _review(proposal=_proposal(proposal_run_id="shared-run"))
+
+    with pytest.raises(ValueError, match="must differ"):
+        ApplicationAuthorization(review=review, application_run_id="shared-run")
+
+
+@pytest.mark.parametrize(
+    ("reviewer_id", "application_run_id", "message"),
+    (
+        ("  ", "application-run", "reviewer id must not be blank"),
+        ("reviewer-a", "  ", "application run id must not be blank"),
+    ),
+)
+def test_review_and_authorization_reject_blank_identities(
+    reviewer_id: str,
+    application_run_id: str,
+    message: str,
+) -> None:
+    if not reviewer_id.strip():
+        with pytest.raises(ValueError, match=message):
+            _review(reviewer_id=reviewer_id)
+    else:
+        with pytest.raises(ValueError, match=message):
+            ApplicationAuthorization(
+                review=_review(reviewer_id=reviewer_id),
+                application_run_id=application_run_id,
+            )
+
+
+def test_review_and_authorization_are_immutable_and_have_no_application_api() -> None:
+    review = _review()
+    authorization = ApplicationAuthorization(review=review, application_run_id="application-run")
+
+    with pytest.raises(AttributeError):
+        review.reviewer_id = "different reviewer"  # type: ignore[misc]
+    with pytest.raises(AttributeError):
+        authorization.application_run_id = "different run"  # type: ignore[misc]
+    assert not hasattr(ApplicationAuthorization, "apply")
+    assert not hasattr(ApplicationAuthorization, "mutate")

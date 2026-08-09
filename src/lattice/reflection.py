@@ -15,10 +15,14 @@ __all__ = [
     "MAX_AGENTS_MD_REPLACEMENT_CHARS",
     "MAX_SKILL_REPLACEMENT_CHARS",
     "MAX_TOOL_DESCRIPTION_REPLACEMENT_CHARS",
+    "ApplicationAuthorization",
     "FailureCategory",
     "ReflectionCluster",
+    "ReflectionDiff",
     "ReflectionProposal",
+    "ReflectionReview",
     "ReflectionTargetKind",
+    "ReviewDecision",
     "TrajectoryEvidence",
     "cluster_reflection_evidence",
 ]
@@ -30,6 +34,13 @@ class ReflectionTargetKind(StrEnum):
     AGENTS_MD = "agents_md"
     SKILL = "skill"
     TOOL_DESCRIPTION = "tool_description"
+
+
+class ReviewDecision(StrEnum):
+    """A human review outcome for a reflection proposal."""
+
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
 
 
 @dataclass(frozen=True)
@@ -83,6 +94,7 @@ class ReflectionProposal:
     """An immutable, review-only proposed replacement supported by one cluster."""
 
     proposal_id: str
+    proposal_run_id: str
     proposing_coach_id: str
     target_agent_id: str
     target_kind: ReflectionTargetKind
@@ -94,6 +106,8 @@ class ReflectionProposal:
     def __post_init__(self) -> None:
         if not self.proposal_id.strip():
             raise ValueError("proposal id must not be blank")
+        if not self.proposal_run_id.strip():
+            raise ValueError("proposal run id must not be blank")
         if not self.proposing_coach_id.strip():
             raise ValueError("proposing coach id must not be blank")
         if not self.target_agent_id.strip():
@@ -122,6 +136,77 @@ class ReflectionProposal:
     def trajectory_refs(self) -> tuple[str, ...]:
         """Exact supporting trajectory references from the retained evidence cluster."""
         return self.evidence_cluster.trajectory_refs
+
+
+@dataclass(frozen=True)
+class ReflectionDiff:
+    """The human-visible artifact change considered during review."""
+
+    before_text: str
+    after_text: str
+
+    def __post_init__(self) -> None:
+        if self.before_text == self.after_text:
+            raise ValueError("reflection diff must show a change")
+
+
+@dataclass(frozen=True)
+class ReflectionReview:
+    """An immutable human decision over one proposal and its visible diff."""
+
+    proposal: ReflectionProposal
+    diff: ReflectionDiff
+    reviewer_id: str
+    decision: ReviewDecision
+
+    def __post_init__(self) -> None:
+        if not self.reviewer_id.strip():
+            raise ValueError("reviewer id must not be blank")
+        if not isinstance(self.decision, ReviewDecision):
+            raise ValueError("review decision must be a ReviewDecision")
+        if self.diff.after_text != self.proposal.replacement_text:
+            raise ValueError("review diff after text must match the proposal replacement text")
+
+    @property
+    def proposal_run_id(self) -> str:
+        """Run that authored the reviewed proposal."""
+        return self.proposal.proposal_run_id
+
+    @property
+    def trajectory_refs(self) -> tuple[str, ...]:
+        """Exact evidence provenance retained by the reviewed proposal."""
+        return self.proposal.trajectory_refs
+
+
+@dataclass(frozen=True)
+class ApplicationAuthorization:
+    """An accepted human review cleared for a later application run."""
+
+    review: ReflectionReview
+    application_run_id: str
+
+    def __post_init__(self) -> None:
+        if self.review.decision is not ReviewDecision.ACCEPTED:
+            raise ValueError("application authorization requires an accepted review")
+        if not self.application_run_id.strip():
+            raise ValueError("application run id must not be blank")
+        if self.application_run_id.strip() == self.review.proposal_run_id.strip():
+            raise ValueError("proposal run id and application run id must differ")
+
+    @property
+    def proposal(self) -> ReflectionProposal:
+        """Reviewed proposal, including its exact evidence provenance."""
+        return self.review.proposal
+
+    @property
+    def proposal_run_id(self) -> str:
+        """Run that authored the reviewed proposal."""
+        return self.review.proposal_run_id
+
+    @property
+    def trajectory_refs(self) -> tuple[str, ...]:
+        """Exact evidence provenance retained by the accepted review."""
+        return self.review.trajectory_refs
 
 
 def cluster_reflection_evidence(

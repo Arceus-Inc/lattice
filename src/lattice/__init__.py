@@ -14,15 +14,20 @@ from lattice.domain import (
 )
 from lattice.facade import Lattice
 from lattice.reflection import (
+    ApplicationAuthorization,
     FailureCategory,
     ReflectionCluster,
+    ReflectionDiff,
     ReflectionProposal,
+    ReflectionReview,
     ReflectionTargetKind,
+    ReviewDecision,
     TrajectoryEvidence,
     cluster_reflection_evidence,
 )
 
 __all__ = [
+    "ApplicationAuthorization",
     "ApplyResult",
     "FailureCategory",
     "HabitAction",
@@ -33,8 +38,11 @@ __all__ = [
     "PatternDraft",
     "Proposal",
     "ReflectionCluster",
+    "ReflectionDiff",
     "ReflectionProposal",
+    "ReflectionReview",
     "ReflectionTargetKind",
+    "ReviewDecision",
     "TrajectoryEvidence",
     "ValidationResult",
     "cluster_reflection_evidence",
