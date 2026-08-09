@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 
 from lattice.consolidate.apply import apply_proposal
@@ -40,6 +42,7 @@ class Lattice:
         packet_limit: int = 20,
         canonical_skills_root: Path | None = None,
         evolved_skills_root: Path | None = None,
+        apply_scope: Callable[[str], AbstractContextManager[None]] | None = None,
     ) -> None:
         self._episodes = episodes
         self._cursor = cursor
@@ -50,6 +53,7 @@ class Lattice:
         self._packet_limit = packet_limit
         self._canonical_skills_root = canonical_skills_root
         self._evolved_skills_root = evolved_skills_root
+        self._apply_scope = apply_scope or _legacy_apply_scope
 
     def gate_open(self, employee_id: str) -> bool:
         watermark = self._cursor.get(employee_id)
@@ -83,19 +87,24 @@ class Lattice:
         )
 
     def apply(self, proposal: Proposal) -> ApplyResult:
-        validation = self.validate(proposal)
-        episodes = self._episodes.records_for(proposal.employee_id)
-        episodes_by_run_id = {episode.run_id: episode for episode in episodes}
-        result = apply_proposal(
-            proposal,
-            validation,
-            atoms=self._atoms,
-            episodes_by_run_id=episodes_by_run_id,
-            patches=self._patches,
-        )
-        if result.ok:
-            self._advance_cursor(proposal.employee_id)
-        return result
+        # ponytail: filesystem habit patches are outside this DB transaction; add a durable outbox
+        # when those writes need rollback semantics too.
+        with self._apply_scope(proposal.employee_id):
+            episodes = self._episodes.records_for(proposal.employee_id)
+            if not new_episodes(episodes, self._cursor.get(proposal.employee_id)):
+                return ApplyResult.failed("no fresh episodes", employee_id=proposal.employee_id)
+            validation = self.validate(proposal)
+            episodes_by_run_id = {episode.run_id: episode for episode in episodes}
+            result = apply_proposal(
+                proposal,
+                validation,
+                atoms=self._atoms,
+                episodes_by_run_id=episodes_by_run_id,
+                patches=self._patches,
+            )
+            if result.ok:
+                self._advance_cursor(proposal.employee_id)
+            return result
 
     def adjudicate(self, employee_id: str) -> AdjudicateResult:
         """Update pattern posteriors from episodic outcomes since last consolidation."""
@@ -160,3 +169,7 @@ class Lattice:
             last_run_id=latest.run_id,
             episodes_seen=len(episodes),
         )
+
+
+def _legacy_apply_scope(_: str) -> AbstractContextManager[None]:
+    return nullcontext()

@@ -18,8 +18,14 @@ from lattice.domain.stats import PatternStats, Tier
 class PostgresAtomStore:
     """Company-scoped atom store; the host applies ``lattice.migrations`` before opening it."""
 
-    def __init__(self, connection: psycopg.Connection[tuple[object, ...]]) -> None:
+    def __init__(
+        self,
+        connection: psycopg.Connection[tuple[object, ...]],
+        *,
+        owns_connection: bool = True,
+    ) -> None:
         self._connection = connection
+        self._owns_connection = owns_connection
 
     @classmethod
     def open(cls, conninfo: str, *, company_id: UUID) -> Self:
@@ -34,7 +40,8 @@ class PostgresAtomStore:
         return cls(connection)
 
     def close(self) -> None:
-        self._connection.close()
+        if self._owns_connection:
+            self._connection.close()
 
     def __enter__(self) -> Self:
         return self

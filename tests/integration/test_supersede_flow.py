@@ -6,6 +6,7 @@ from pathlib import Path
 
 from tests.integration.conftest import (
     BeatSimulator,
+    make_episode,
     retry_cluster_episodes,
     valid_retry_proposal,
 )
@@ -28,9 +29,7 @@ def test_supersede_active_pattern(tmp_path: Path) -> None:
         claim=updated_claim,
     )
 
-    # Need fresh episodes after cursor advanced — gate uses new episodes only.
-    # Add one more beat so source_run_id r_b5 is in the post-cursor set is not required
-    # since r_b5 was part of original set; supersedes only needs active key.
+    sim.append_beat(make_episode(run_id="r_b6", offset_minutes=6))
     validation = sim.lattice.validate(supersede_proposal)
     assert validation.ok is True
 
