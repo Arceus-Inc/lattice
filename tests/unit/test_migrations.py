@@ -26,8 +26,7 @@ def test_load_migrations_preserves_order_checksums_and_created_tables() -> None:
         ["lattice_consolidation_cursor"],
     ]
     assert [migration.checksum for migration in migrations] == [
-        hashlib.sha256(migration.raw_bytes if migration.raw_bytes is not None else b"").hexdigest()
-        for migration in migrations
+        hashlib.sha256(migration.sql.encode("utf-8")).hexdigest() for migration in migrations
     ]
 
 
@@ -45,12 +44,11 @@ def test_migration_statements_strip_comments_before_semicolon_splitting() -> Non
     assert migration.table_names() == ["widget", "widget_event"]
 
 
-def test_migration_checksum_uses_raw_package_bytes() -> None:
-    raw_bytes = b"CREATE TABLE byte_exact (id integer);\r\n"
+def test_migration_checksum_preserves_crlf_utf8_bytes() -> None:
+    sql = "CREATE TABLE byte_exact (id integer);\r\n"
     migration = Migration(
         id="test",
-        sql="CREATE TABLE byte_exact (id integer);\n",
-        raw_bytes=raw_bytes,
+        sql=sql,
     )
 
-    assert migration.checksum == hashlib.sha256(raw_bytes).hexdigest()
+    assert migration.checksum == hashlib.sha256(b"CREATE TABLE byte_exact (id integer);\r\n").hexdigest()

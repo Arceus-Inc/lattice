@@ -16,13 +16,11 @@ class Migration:
 
     id: str
     sql: str
-    raw_bytes: bytes | None = None
 
     @property
     def checksum(self) -> str:
-        """SHA-256 of the immutable migration bytes supplied by the package."""
-        contents = self.raw_bytes if self.raw_bytes is not None else self.sql.encode("utf-8")
-        return hashlib.sha256(contents).hexdigest()
+        """SHA-256 of the immutable UTF-8 migration bytes."""
+        return hashlib.sha256(self.sql.encode("utf-8")).hexdigest()
 
     def statements(self) -> list[str]:
         """Executable statements in source order, with line comments removed."""
@@ -39,11 +37,7 @@ def load_migrations() -> tuple[Migration, ...]:
     """Return the SQL deltas for the host application's migration runner."""
     directory = files(__name__)
     return tuple(
-        Migration(
-            id=entry.name.removesuffix(".sql"),
-            sql=(raw_bytes := entry.read_bytes()).decode("utf-8"),
-            raw_bytes=raw_bytes,
-        )
+        Migration(id=entry.name.removesuffix(".sql"), sql=entry.read_bytes().decode("utf-8"))
         for entry in sorted(directory.iterdir(), key=lambda item: item.name)
         if entry.name.endswith(".sql")
     )
