@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
+
 from lattice.contracts.episodic import RawEpisode
 from lattice.reflection import FailureCategory, TrajectoryEvidence, cluster_reflection_evidence
 
@@ -89,3 +91,12 @@ def test_rejects_duplicate_trajectory_references() -> None:
         assert str(error) == "duplicate trajectory reference: 'run-1'"
     else:
         raise AssertionError("duplicate trajectory references must be rejected")
+
+
+def test_rejects_whitespace_only_trajectory_references() -> None:
+    with pytest.raises(ValueError, match="trajectory reference must not be blank"):
+        TrajectoryEvidence(
+            episode=_episode("  \t"),
+            failure_category=FailureCategory(code="retry-policy"),
+            observation="The client retried an invalid request.",
+        )

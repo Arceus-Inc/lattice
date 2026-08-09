@@ -27,7 +27,7 @@ class TrajectoryEvidence:
     observation: str
 
     def __post_init__(self) -> None:
-        if not self.episode.run_id:
+        if not self.episode.run_id.strip():
             raise ValueError("trajectory reference must not be blank")
         if not self.observation.strip():
             raise ValueError("failure observation must not be blank")
