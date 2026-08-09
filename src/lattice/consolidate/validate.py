@@ -10,10 +10,10 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from lattice.contracts.atom import AtomStore
 from lattice.contracts.episodic import RawEpisode
 from lattice.domain.proposal import HabitAction, HabitDraft, PatternDraft, Proposal
 from lattice.domain.result import ValidationResult
-from lattice.stores.memory_md import MemoryMdStore
 
 KEY_PATTERN = re.compile(r"^[a-z][a-z0-9_.]+$")
 SLUG_PATTERN = re.compile(r"^[a-z][a-z0-9-]+$")
@@ -37,9 +37,10 @@ def validate_proposal(
     proposal: Proposal,
     *,
     episodes: tuple[RawEpisode, ...],
-    atoms: MemoryMdStore,
+    atoms: AtomStore,
     max_ops: int = DEFAULT_MAX_OPS,
     canonical_skills_root: Path | None = None,
+    evolved_skills_root: Path | None = None,
 ) -> ValidationResult:
     """Apply the v1 validation rule set to patterns and habits."""
     errors: list[str] = []
@@ -53,7 +54,7 @@ def validate_proposal(
     known_runs = {ep.run_id: ep for ep in episodes if ep.employee_id == proposal.employee_id}
     active_keys = {atom.key for atom in atoms.list_active(proposal.employee_id)}
     canonical_slugs = _canonical_slugs(canonical_skills_root)
-    evolved_slugs = _evolved_slugs(atoms, proposal.employee_id)
+    evolved_slugs = _evolved_slugs(evolved_skills_root, proposal.employee_id)
 
     for index, pattern in enumerate(proposal.patterns):
         prefix = f"patterns[{index}]"
@@ -251,12 +252,11 @@ def _canonical_slugs(root: Path | None) -> set[str]:
     return {path.name for path in root.iterdir() if path.is_dir() and (path / "SKILL.md").exists()}
 
 
-def _evolved_slugs(atoms: MemoryMdStore, employee_id: str) -> set[str]:
-    """Discover prior evolved overlays when the atom store exposes a root path."""
-    root = getattr(atoms, "root", None)
+def _evolved_slugs(root: Path | None, employee_id: str) -> set[str]:
+    """Discover prior evolved overlays from the configured overlay root."""
     if root is None:
         return set()
-    evolved = Path(root) / employee_id / "evolved-skills"
+    evolved = root / employee_id / "evolved-skills"
     if not evolved.is_dir():
         return set()
     return {

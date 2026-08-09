@@ -7,6 +7,7 @@ from pathlib import Path
 from lattice.consolidate.apply import apply_proposal
 from lattice.consolidate.cluster import build_hints, cluster, gate_open, new_episodes, rank
 from lattice.consolidate.validate import validate_proposal
+from lattice.contracts.atom import AtomStore
 from lattice.contracts.episodic import EpisodicReader
 from lattice.contracts.patch import PatchStore
 from lattice.directive import (
@@ -22,7 +23,6 @@ from lattice.semantic.adjudicate import adjudicate_atoms
 from lattice.semantic.forget import forget_employee
 from lattice.semantic.retrieve import render_context
 from lattice.stores.json_cursor import JsonCursorStore
-from lattice.stores.memory_md import MemoryMdStore
 
 
 class Lattice:
@@ -33,12 +33,13 @@ class Lattice:
         *,
         episodes: EpisodicReader,
         cursor: JsonCursorStore,
-        atoms: MemoryMdStore,
+        atoms: AtomStore,
         patches: PatchStore | None = None,
         min_new_episodes: int = DEFAULT_MIN_NEW_EPISODES,
         min_cluster_size: int = DEFAULT_MIN_CLUSTER_SIZE,
         packet_limit: int = 20,
         canonical_skills_root: Path | None = None,
+        evolved_skills_root: Path | None = None,
     ) -> None:
         self._episodes = episodes
         self._cursor = cursor
@@ -48,6 +49,7 @@ class Lattice:
         self._min_cluster = min_cluster_size
         self._packet_limit = packet_limit
         self._canonical_skills_root = canonical_skills_root
+        self._evolved_skills_root = evolved_skills_root
 
     def gate_open(self, employee_id: str) -> bool:
         watermark = self._cursor.get(employee_id)
@@ -77,6 +79,7 @@ class Lattice:
             episodes=episodes,
             atoms=self._atoms,
             canonical_skills_root=self._canonical_skills_root,
+            evolved_skills_root=self._evolved_skills_root,
         )
 
     def apply(self, proposal: Proposal) -> ApplyResult:

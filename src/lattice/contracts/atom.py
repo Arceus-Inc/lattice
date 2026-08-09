@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from lattice.domain.stats import PatternStats
@@ -23,3 +23,13 @@ class Atom:
     activation: float = 1.0
     stats: PatternStats | None = None
     key_files: tuple[str, ...] = ()
+
+
+class AtomStore(Protocol):
+    """Persistence port for durable semantic atoms."""
+
+    def list_active(self, employee_id: str) -> tuple[Atom, ...]: ...
+
+    def write(self, atom: Atom) -> None: ...
+
+    def invalidate(self, employee_id: str, key: str, *, at: datetime) -> None: ...

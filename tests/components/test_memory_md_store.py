@@ -5,12 +5,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from lattice.contracts.atom import Atom
+from lattice.contracts.atom import Atom, AtomStore
 from lattice.stores.memory_md import MemoryMdStore
 
 
 def test_write_sanitizes_key_in_filename(tmp_path: Path) -> None:
-    atoms = MemoryMdStore(tmp_path)
+    atoms: AtomStore = MemoryMdStore(tmp_path)
     now = datetime.now(UTC)
     atoms.write(
         Atom(
