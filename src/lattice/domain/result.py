@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from lattice.contracts.applied import AppliedAtomEdge
 from lattice.contracts.atom import ContextAtomHit
 
 
@@ -40,6 +41,14 @@ class ContextResult:
 
     markdown: str
     hits: tuple[ContextAtomHit, ...]
+
+
+@dataclass(frozen=True)
+class AppliedContextResult:
+    """Exact persisted outcomes plus legacy hits intentionally excluded from them."""
+
+    edges: tuple[AppliedAtomEdge, ...]
+    skipped_unversioned_hits: tuple[ContextAtomHit, ...]
 
 
 @dataclass(frozen=True)

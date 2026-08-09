@@ -18,12 +18,7 @@ from lattice.stores.postgres import PostgresLatticeStore
 
 
 def _lattice(store: PostgresLatticeStore, reader: _GrowingReader) -> Lattice:
-    return Lattice(
-        episodes=reader,
-        atoms=store.atoms,
-        cursor=store.cursor,
-        apply_scope=store.apply_scope,
-    )
+    return store.build_lattice(episodes=reader)
 
 
 class _FailingAfterWrite:

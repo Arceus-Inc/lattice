@@ -10,10 +10,11 @@ from threading import Barrier
 import psycopg
 import pytest
 from psycopg.errors import ForeignKeyViolation, ObjectNotInPrerequisiteState
-from tests.integration.conftest import app_role_conninfo
+from tests.integration.conftest import _GrowingReader, app_role_conninfo
 
 from lattice.contracts.applied import AppliedAtomEdge, AppliedEdgeConflictError, LandedOutcomePhase
 from lattice.contracts.atom import Atom, ContextAtomHit
+from lattice.stores.postgres import PostgresLatticeStore
 from lattice.stores.postgres_applied_edges import PostgresAppliedEdgeStore
 from lattice.stores.postgres_atoms import PostgresAtomStore
 
@@ -86,8 +87,8 @@ def test_postgres_applied_edge_replay_is_idempotent_and_conflicts_on_different_o
         atoms.write(_atom())
         edge = _edge(atoms.list_active_hits("agent-1")[0])
     with PostgresAppliedEdgeStore.open(pg_database, company_id=company_id) as edges:
-        edges.record(edge)
-        edges.record(edge)
+        assert edges.record_all((edge,)) == (edge,)
+        assert edges.record_all((edge,)) == (edge,)
         conflicting = AppliedAtomEdge(
             employee_id=edge.employee_id,
             key=edge.key,
@@ -165,6 +166,56 @@ def test_postgres_applied_beat_serializes_concurrent_conflicting_replays(
         assert sorted((first_result.result(), second_result.result())) == ["conflict", "stored"]
         persisted = first.list_for_run("agent-1", "run-landing")
         assert persisted in (subset, superset)
+
+
+def test_postgres_applied_edge_batch_rolls_back_when_any_edge_cannot_be_persisted(
+    pg_database: str,
+) -> None:
+    company_id = uuid.uuid4()
+    with PostgresAtomStore.open(pg_database, company_id=company_id) as atoms:
+        atoms.write(_atom())
+        edge = _edge(atoms.list_active_hits("agent-1")[0])
+    invalid = AppliedAtomEdge(
+        employee_id=edge.employee_id,
+        key=edge.key,
+        revision=edge.revision + 1,
+        beat_run_id=edge.beat_run_id,
+        outcome_phase=edge.outcome_phase,
+        landed_at=edge.landed_at,
+    )
+    with PostgresAppliedEdgeStore.open(pg_database, company_id=company_id) as edges:
+        with pytest.raises(ForeignKeyViolation):
+            edges.record_all((edge, invalid))
+        assert edges.list_for_run("agent-1", "run-landing") == ()
+
+
+def test_canonical_postgres_composition_records_revisioned_context_across_restart(
+    pg_database: str,
+) -> None:
+    company_id = uuid.uuid4()
+    landed_at = datetime(2026, 8, 10, tzinfo=UTC)
+    with PostgresLatticeStore.open(pg_database, company_id=company_id) as store:
+        store.atoms.write(_atom())
+        lattice = store.build_lattice(episodes=_GrowingReader([]))
+
+        context = lattice.context_result("agent-1", "retry")
+
+        assert len(context.hits) == 1
+        assert context.hits[0].revision == 1
+        recorded = lattice.record_landed_context(
+            "agent-1",
+            context,
+            beat_run_id="run-canonical",
+            outcome_phase=LandedOutcomePhase.NEEDS_REWORK,
+            landed_at=landed_at,
+        )
+        assert recorded.skipped_unversioned_hits == ()
+        assert store.applied_edges.list_for_run("agent-1", "run-canonical") == recorded.edges
+
+    with PostgresLatticeStore.open(pg_database, company_id=company_id) as restarted:
+        lattice = restarted.build_lattice(episodes=_GrowingReader([]))
+        assert lattice.context_result("agent-1", "retry").hits[0].revision == 1
+        assert restarted.applied_edges.list_for_run("agent-1", "run-canonical") == recorded.edges
 
 
 def test_postgres_applied_edge_requires_an_exact_atom_revision(pg_database: str) -> None:

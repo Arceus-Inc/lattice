@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext
+from datetime import datetime
 from pathlib import Path
 
 from lattice.consolidate.apply import apply_proposal
 from lattice.consolidate.cluster import build_hints, cluster, gate_open, new_episodes, rank
 from lattice.consolidate.validate import validate_proposal
+from lattice.contracts.applied import AppliedAtomEdge, AppliedEdgeStore, LandedOutcomePhase
 from lattice.contracts.atom import Atom, AtomHitReader, AtomStore, ContextAtomHit
 from lattice.contracts.cursor import CursorStore
 from lattice.contracts.episodic import EpisodicReader
@@ -23,6 +25,7 @@ from lattice.domain.packet import Packet
 from lattice.domain.proposal import Proposal
 from lattice.domain.result import (
     AdjudicateResult,
+    AppliedContextResult,
     ApplyResult,
     ContextResult,
     ForgetResult,
@@ -50,6 +53,7 @@ class Lattice:
         evolved_skills_root: Path | None = None,
         apply_scope: Callable[[str], AbstractContextManager[None]] | None = None,
         atom_hits: AtomHitReader | None = None,
+        applied_edges: AppliedEdgeStore | None = None,
     ) -> None:
         self._episodes = episodes
         self._cursor = cursor
@@ -62,6 +66,7 @@ class Lattice:
         self._evolved_skills_root = evolved_skills_root
         self._apply_scope = apply_scope or _legacy_apply_scope
         self._atom_hits = atom_hits
+        self._applied_edges = applied_edges
 
     def gate_open(self, employee_id: str) -> bool:
         watermark = self._cursor.get(employee_id)
@@ -167,6 +172,38 @@ class Lattice:
         )
         return context_result(query, hits, k=k)
 
+    def record_landed_context(
+        self,
+        employee_id: str,
+        context: ContextResult,
+        *,
+        beat_run_id: str,
+        outcome_phase: LandedOutcomePhase,
+        landed_at: datetime,
+    ) -> AppliedContextResult:
+        """Persist all exact hits selected for one landed beat in one atomic edge batch."""
+        if any(hit.employee_id != employee_id for hit in context.hits):
+            raise ValueError("context hits must belong to the landed employee")
+        revisioned_hits = tuple(hit for hit in context.hits if hit.revision is not None)
+        skipped_unversioned_hits = tuple(hit for hit in context.hits if hit.revision is None)
+        if not revisioned_hits:
+            return AppliedContextResult((), skipped_unversioned_hits)
+        if self._applied_edges is None:
+            raise RuntimeError("recording revisioned context requires an AppliedEdgeStore")
+        edges = tuple(
+            _landed_edge(
+                hit,
+                beat_run_id=beat_run_id,
+                outcome_phase=outcome_phase,
+                landed_at=landed_at,
+            )
+            for hit in revisioned_hits
+        )
+        return AppliedContextResult(
+            edges=self._applied_edges.record_all(edges),
+            skipped_unversioned_hits=skipped_unversioned_hits,
+        )
+
     def beat_end_teaser(self, employee_id: str) -> str:
         """Short beat-end notice — empty when gate closed (no consolidation nudge)."""
         return beat_end_notice(gate_open=self.gate_open(employee_id))
@@ -200,4 +237,23 @@ def _unversioned_hits(atoms: tuple[Atom, ...]) -> tuple[ContextAtomHit, ...]:
             atom=atom,
         )
         for atom in atoms
+    )
+
+
+def _landed_edge(
+    hit: ContextAtomHit,
+    *,
+    beat_run_id: str,
+    outcome_phase: LandedOutcomePhase,
+    landed_at: datetime,
+) -> AppliedAtomEdge:
+    if hit.revision is None:
+        raise ValueError("an APPLIED edge requires an exact atom revision")
+    return AppliedAtomEdge(
+        employee_id=hit.employee_id,
+        key=hit.key,
+        revision=hit.revision,
+        beat_run_id=beat_run_id,
+        outcome_phase=outcome_phase,
+        landed_at=landed_at,
     )
