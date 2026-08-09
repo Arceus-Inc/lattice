@@ -21,6 +21,7 @@ __all__ = [
     "ReflectionDiff",
     "ReflectionProposal",
     "ReflectionReview",
+    "ReflectionRunRef",
     "ReflectionTargetKind",
     "ReviewDecision",
     "TrajectoryEvidence",
@@ -41,6 +42,20 @@ class ReviewDecision(StrEnum):
 
     ACCEPTED = "accepted"
     REJECTED = "rejected"
+
+
+@dataclass(frozen=True)
+class ReflectionRunRef:
+    """A run identity plus its trusted monotonic order in one execution lineage."""
+
+    run_id: str
+    sequence: int
+
+    def __post_init__(self) -> None:
+        if not self.run_id.strip():
+            raise ValueError("reflection run id must not be blank")
+        if self.sequence < 0:
+            raise ValueError("reflection run sequence must be nonnegative")
 
 
 @dataclass(frozen=True)
@@ -94,7 +109,7 @@ class ReflectionProposal:
     """An immutable, review-only proposed replacement supported by one cluster."""
 
     proposal_id: str
-    proposal_run_id: str
+    proposal_run: ReflectionRunRef
     proposing_coach_id: str
     target_agent_id: str
     target_kind: ReflectionTargetKind
@@ -106,8 +121,6 @@ class ReflectionProposal:
     def __post_init__(self) -> None:
         if not self.proposal_id.strip():
             raise ValueError("proposal id must not be blank")
-        if not self.proposal_run_id.strip():
-            raise ValueError("proposal run id must not be blank")
         if not self.proposing_coach_id.strip():
             raise ValueError("proposing coach id must not be blank")
         if not self.target_agent_id.strip():
@@ -137,6 +150,11 @@ class ReflectionProposal:
         """Exact supporting trajectory references from the retained evidence cluster."""
         return self.evidence_cluster.trajectory_refs
 
+    @property
+    def proposal_run_id(self) -> str:
+        """Run that authored the proposal."""
+        return self.proposal_run.run_id
+
 
 @dataclass(frozen=True)
 class ReflectionDiff:
@@ -162,6 +180,8 @@ class ReflectionReview:
     def __post_init__(self) -> None:
         if not self.reviewer_id.strip():
             raise ValueError("reviewer id must not be blank")
+        if self.reviewer_id.strip() == self.proposal.proposing_coach_id.strip():
+            raise ValueError("reflection reviewer must be independent from the proposing coach")
         if not isinstance(self.decision, ReviewDecision):
             raise ValueError("review decision must be a ReviewDecision")
         if self.diff.after_text != self.proposal.replacement_text:
@@ -183,15 +203,13 @@ class ApplicationAuthorization:
     """An accepted human review cleared for a later application run."""
 
     review: ReflectionReview
-    application_run_id: str
+    application_run: ReflectionRunRef
 
     def __post_init__(self) -> None:
         if self.review.decision is not ReviewDecision.ACCEPTED:
             raise ValueError("application authorization requires an accepted review")
-        if not self.application_run_id.strip():
-            raise ValueError("application run id must not be blank")
-        if self.application_run_id.strip() == self.review.proposal_run_id.strip():
-            raise ValueError("proposal run id and application run id must differ")
+        if self.application_run.sequence <= self.review.proposal.proposal_run.sequence:
+            raise ValueError("application run must be later than the proposal run")
 
     @property
     def proposal(self) -> ReflectionProposal:
@@ -202,6 +220,11 @@ class ApplicationAuthorization:
     def proposal_run_id(self) -> str:
         """Run that authored the reviewed proposal."""
         return self.review.proposal_run_id
+
+    @property
+    def application_run_id(self) -> str:
+        """Later run authorized to apply the reviewed proposal."""
+        return self.application_run.run_id
 
     @property
     def trajectory_refs(self) -> tuple[str, ...]:
