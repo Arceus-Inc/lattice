@@ -8,8 +8,10 @@ import socket
 import subprocess
 import uuid
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Barrier
 
 import psycopg
 import pytest
@@ -113,7 +115,7 @@ def _atom(*, value: str = "retry with capped exponential backoff") -> Atom:
 
 
 def test_postgres_atom_round_trip_survives_restart(pg_database: str) -> None:
-    company_id = str(uuid.uuid4())
+    company_id = uuid.uuid4()
     atom = _atom()
     older = Atom(
         employee_id=atom.employee_id,
@@ -133,7 +135,7 @@ def test_postgres_atom_round_trip_survives_restart(pg_database: str) -> None:
 
 
 def test_postgres_atom_write_overwrites_head_and_records_versions(pg_database: str) -> None:
-    company_id = str(uuid.uuid4())
+    company_id = uuid.uuid4()
     first = _atom(value="retry with capped exponential backoff")
     second = Atom(
         employee_id=first.employee_id,
@@ -160,11 +162,12 @@ def test_postgres_atom_write_overwrites_head_and_records_versions(pg_database: s
 
 
 def test_postgres_atom_invalidation_removes_active_head_and_keeps_history(pg_database: str) -> None:
-    company_id = str(uuid.uuid4())
+    company_id = uuid.uuid4()
     atom = _atom()
     invalid_at = datetime(2026, 8, 11, tzinfo=UTC)
     with PostgresAtomStore.open(pg_database, company_id=company_id) as store:
         store.write(atom)
+        store.invalidate(atom.employee_id, atom.key, at=invalid_at)
         store.invalidate(atom.employee_id, atom.key, at=invalid_at)
         assert store.list_active(atom.employee_id) == ()
 
@@ -174,13 +177,44 @@ def test_postgres_atom_invalidation_removes_active_head_and_keeps_history(pg_dat
             "WHERE employee_id = %s AND key = %s ORDER BY version",
             (atom.employee_id, atom.key),
         ).fetchall()
-    assert revisions[0] == (1, None)
-    assert revisions[1] == (2, invalid_at)
+    assert revisions == [(1, None), (2, invalid_at)]
+
+
+def test_postgres_atom_identical_concurrent_writes_are_idempotent(pg_database: str) -> None:
+    company_id = uuid.uuid4()
+    atom = _atom()
+    with (
+        PostgresAtomStore.open(pg_database, company_id=company_id) as store_a,
+        PostgresAtomStore.open(pg_database, company_id=company_id) as store_b,
+    ):
+        barrier = Barrier(2)
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = (
+                executor.submit(_write_after_barrier, store_a, atom, barrier),
+                executor.submit(_write_after_barrier, store_b, atom, barrier),
+            )
+            for future in futures:
+                future.result()
+        assert store_a.list_active(atom.employee_id) == (atom,)
+
+    with psycopg.connect(pg_database) as admin:
+        revisions = admin.execute(
+            "SELECT version FROM lattice_atom_revision "
+            "WHERE employee_id = %s AND key = %s ORDER BY version",
+            (atom.employee_id, atom.key),
+        ).fetchall()
+        source_runs = admin.execute(
+            "SELECT run_id FROM lattice_atom_revision_source_run "
+            "WHERE employee_id = %s AND key = %s ORDER BY position",
+            (atom.employee_id, atom.key),
+        ).fetchall()
+    assert revisions == [(1,)]
+    assert source_runs == [("run-1",), ("run-2",)]
 
 
 def test_postgres_atom_isolates_companies_with_force_rls(pg_database: str) -> None:
     app_conninfo = _app_role_conninfo(pg_database)
-    company_a, company_b = str(uuid.uuid4()), str(uuid.uuid4())
+    company_a, company_b = uuid.uuid4(), uuid.uuid4()
     atom = _atom()
     with (
         PostgresAtomStore.open(app_conninfo, company_id=company_a) as store_a,
@@ -203,3 +237,8 @@ def _app_role_conninfo(conninfo: str) -> str:
         admin.execute("GRANT USAGE ON SCHEMA public TO lattice_app")
         admin.execute("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO lattice_app")
     return conninfo.replace("user=postgres", "user=lattice_app")
+
+
+def _write_after_barrier(store: PostgresAtomStore, atom: Atom, barrier: Barrier) -> None:
+    barrier.wait()
+    store.write(atom)

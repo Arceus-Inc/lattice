@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import datetime
 from types import TracebackType
 from typing import Self
+from uuid import UUID
 
 import psycopg
 from psycopg.rows import tuple_row
@@ -21,7 +22,7 @@ class PostgresAtomStore:
         self._connection = connection
 
     @classmethod
-    def open(cls, conninfo: str, *, company_id: str) -> Self:
+    def open(cls, conninfo: str, *, company_id: UUID) -> Self:
         """Open a dedicated connection whose session GUC scopes every statement by company."""
         connection: psycopg.Connection[tuple[object, ...]] = psycopg.connect(
             conninfo,
@@ -29,7 +30,7 @@ class PostgresAtomStore:
             row_factory=tuple_row,
         )
         connection.execute("SET TIME ZONE 'UTC'")
-        connection.execute("SELECT set_config('app.company_id', %s, false)", (company_id,))
+        connection.execute("SELECT set_config('app.company_id', %s, false)", (str(company_id),))
         return cls(connection)
 
     def close(self) -> None:
@@ -59,29 +60,36 @@ class PostgresAtomStore:
 
     def write(self, atom: Atom) -> None:
         with self._connection.transaction():
-            self._persist(atom)
+            self._lock_atom(atom.employee_id, atom.key)
+            if self._read_atom(atom.employee_id, atom.key) != atom:
+                self._persist(atom)
 
     def invalidate(self, employee_id: str, key: str, *, at: datetime) -> None:
         with self._connection.transaction():
-            atom = self._read_atom(employee_id, key, for_update=True)
-            if atom is not None:
+            self._lock_atom(employee_id, key)
+            atom = self._read_atom(employee_id, key)
+            if atom is not None and atom.invalid_at != at:
                 self._persist(replace(atom, invalid_at=at))
 
     def _read_atom(
         self,
         employee_id: str,
         key: str,
-        *,
-        for_update: bool = False,
     ) -> Atom | None:
         conditions = "employee_id = %s AND key = %s"
-        lock = " FOR UPDATE" if for_update else ""
         row = self._connection.execute(
             "SELECT employee_id, key, value, created_at, invalid_at, activation, "
-            f"alpha_own, beta_own, tier FROM lattice_atom WHERE {conditions}{lock}",
+            f"alpha_own, beta_own, tier FROM lattice_atom WHERE {conditions}",
             (employee_id, key),
         ).fetchone()
         return self._atom_from_row(row) if row is not None else None
+
+    def _lock_atom(self, employee_id: str, key: str) -> None:
+        self._connection.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended("
+            "current_setting('app.company_id', true) || E'\\x1f' || %s || E'\\x1f' || %s, 0))",
+            (employee_id, key),
+        )
 
     def _persist(self, atom: Atom) -> None:
         alpha, beta, tier = _stats_values(atom.stats)
