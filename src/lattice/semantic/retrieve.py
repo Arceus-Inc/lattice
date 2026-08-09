@@ -7,7 +7,8 @@ from datetime import UTC, datetime
 
 from rank_bm25 import BM25Okapi
 
-from lattice.contracts.atom import Atom
+from lattice.contracts.atom import Atom, ContextAtomHit
+from lattice.domain.result import ContextResult
 from lattice.domain.stats import PatternStats, Tier
 
 DEFAULT_TOP_K = 5
@@ -84,31 +85,66 @@ def score(
 
 def top_k(query: str, atoms: tuple[Atom, ...], *, k: int = DEFAULT_TOP_K) -> tuple[Atom, ...]:
     """Return the k highest-scoring active atoms that pass the domain gate."""
-    if not atoms:
-        return ()
-
-    reference = datetime.now(UTC)
-    bm25_norms = _bm25_normalized_scores(query, atoms)
-    ranked: list[tuple[float, Atom]] = []
-    for atom, bm25_norm in zip(atoms, bm25_norms, strict=True):
-        if not eligible(query, atom):
-            continue
-        total = score(query, atom, bm25_norm=bm25_norm, now=reference)
-        ranked.append((total, atom))
-
-    ranked.sort(key=lambda item: item[0], reverse=True)
-    return tuple(atom for _, atom in ranked[:k])
+    return tuple(hit.atom for hit in top_k_hits(query, _unversioned_hits(atoms), k=k))
 
 
 def render_context(query: str, atoms: tuple[Atom, ...], *, k: int = DEFAULT_TOP_K) -> str:
     """Render top-k patterns with provenance cues for recall drill-down."""
     selected = top_k(query, atoms, k=k)
+    return _render_selected(selected)
+
+
+def context_result(
+    query: str,
+    hits: tuple[ContextAtomHit, ...],
+    *,
+    k: int = DEFAULT_TOP_K,
+) -> ContextResult:
+    """Render selected hits while preserving their typed revision identity."""
+    selected = top_k_hits(query, hits, k=k)
+    return ContextResult(markdown=_render_selected(tuple(hit.atom for hit in selected)), hits=selected)
+
+
+def top_k_hits(
+    query: str,
+    hits: tuple[ContextAtomHit, ...],
+    *,
+    k: int = DEFAULT_TOP_K,
+) -> tuple[ContextAtomHit, ...]:
+    """Return top-k eligible typed retrieval hits without parsing rendered Markdown."""
+    if not hits:
+        return ()
+    atoms = tuple(hit.atom for hit in hits)
+    reference = datetime.now(UTC)
+    bm25_norms = _bm25_normalized_scores(query, atoms)
+    ranked: list[tuple[float, ContextAtomHit]] = []
+    for hit, bm25_norm in zip(hits, bm25_norms, strict=True):
+        if not eligible(query, hit.atom):
+            continue
+        ranked.append((score(query, hit.atom, bm25_norm=bm25_norm, now=reference), hit))
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    return tuple(hit for _, hit in ranked[:k])
+
+
+def _render_selected(selected: tuple[Atom, ...]) -> str:
     if not selected:
         return ""
     lines = ["## lattice patterns", ""]
     for atom in selected:
         lines.extend(_format_pattern_lines(atom))
     return "\n".join(lines) + "\n"
+
+
+def _unversioned_hits(atoms: tuple[Atom, ...]) -> tuple[ContextAtomHit, ...]:
+    return tuple(
+        ContextAtomHit(
+            employee_id=atom.employee_id,
+            key=atom.key,
+            revision=None,
+            atom=atom,
+        )
+        for atom in atoms
+    )
 
 
 def _format_pattern_lines(atom: Atom) -> tuple[str, ...]:

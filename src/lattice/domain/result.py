@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from lattice.contracts.atom import ContextAtomHit
+
 
 @dataclass(frozen=True)
 class ValidationResult:
@@ -30,6 +32,14 @@ class ApplyResult:
     @staticmethod
     def failed(*errors: str, employee_id: str = "") -> ApplyResult:
         return ApplyResult(employee_id=employee_id, errors=errors)
+
+
+@dataclass(frozen=True)
+class ContextResult:
+    """Rendered context plus the exact atoms selected to produce it."""
+
+    markdown: str
+    hits: tuple[ContextAtomHit, ...]
 
 
 @dataclass(frozen=True)

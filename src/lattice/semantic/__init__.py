@@ -11,12 +11,13 @@ from lattice.semantic.adjudicate import (
     key_files_from_runs,
 )
 from lattice.semantic.forget import discount_stats, forget_atoms, forget_employee, should_invalidate
-from lattice.semantic.retrieve import render_context, score, top_k
+from lattice.semantic.retrieve import context_result, render_context, score, top_k, top_k_hits
 
 __all__ = [
     "adjudicate_atom",
     "adjudicate_atoms",
     "apply_episode_to_stats",
+    "context_result",
     "discount_stats",
     "fingerprint_overlap",
     "forget_atoms",
@@ -27,4 +28,5 @@ __all__ = [
     "score",
     "should_invalidate",
     "top_k",
+    "top_k_hits",
 ]

@@ -9,7 +9,7 @@ from pathlib import Path
 from lattice.consolidate.apply import apply_proposal
 from lattice.consolidate.cluster import build_hints, cluster, gate_open, new_episodes, rank
 from lattice.consolidate.validate import validate_proposal
-from lattice.contracts.atom import AtomStore
+from lattice.contracts.atom import Atom, AtomHitReader, AtomStore, ContextAtomHit
 from lattice.contracts.cursor import CursorStore
 from lattice.contracts.episodic import EpisodicReader
 from lattice.contracts.patch import PatchStore
@@ -21,10 +21,16 @@ from lattice.directive import (
 )
 from lattice.domain.packet import Packet
 from lattice.domain.proposal import Proposal
-from lattice.domain.result import AdjudicateResult, ApplyResult, ForgetResult, ValidationResult
+from lattice.domain.result import (
+    AdjudicateResult,
+    ApplyResult,
+    ContextResult,
+    ForgetResult,
+    ValidationResult,
+)
 from lattice.semantic.adjudicate import adjudicate_atoms
 from lattice.semantic.forget import forget_employee
-from lattice.semantic.retrieve import render_context
+from lattice.semantic.retrieve import context_result
 
 
 class Lattice:
@@ -43,6 +49,7 @@ class Lattice:
         canonical_skills_root: Path | None = None,
         evolved_skills_root: Path | None = None,
         apply_scope: Callable[[str], AbstractContextManager[None]] | None = None,
+        atom_hits: AtomHitReader | None = None,
     ) -> None:
         self._episodes = episodes
         self._cursor = cursor
@@ -54,6 +61,7 @@ class Lattice:
         self._canonical_skills_root = canonical_skills_root
         self._evolved_skills_root = evolved_skills_root
         self._apply_scope = apply_scope or _legacy_apply_scope
+        self._atom_hits = atom_hits
 
     def gate_open(self, employee_id: str) -> bool:
         watermark = self._cursor.get(employee_id)
@@ -148,8 +156,16 @@ class Lattice:
         return len(new_episodes(episodes, watermark)) > 0
 
     def context(self, employee_id: str, query: str, *, k: int = 5) -> str:
-        atoms = self._atoms.list_active(employee_id)
-        return render_context(query, atoms, k=k)
+        return self.context_result(employee_id, query, k=k).markdown
+
+    def context_result(self, employee_id: str, query: str, *, k: int = 5) -> ContextResult:
+        """Retrieve rendered context and exact selected atom identities."""
+        hits = (
+            self._atom_hits.list_active_hits(employee_id)
+            if self._atom_hits is not None
+            else _unversioned_hits(self._atoms.list_active(employee_id))
+        )
+        return context_result(query, hits, k=k)
 
     def beat_end_teaser(self, employee_id: str) -> str:
         """Short beat-end notice — empty when gate closed (no consolidation nudge)."""
@@ -173,3 +189,15 @@ class Lattice:
 
 def _legacy_apply_scope(_: str) -> AbstractContextManager[None]:
     return nullcontext()
+
+
+def _unversioned_hits(atoms: tuple[Atom, ...]) -> tuple[ContextAtomHit, ...]:
+    return tuple(
+        ContextAtomHit(
+            employee_id=atom.employee_id,
+            key=atom.key,
+            revision=None,
+            atom=atom,
+        )
+        for atom in atoms
+    )

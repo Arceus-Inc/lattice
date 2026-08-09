@@ -12,6 +12,7 @@ from tests.integration.conftest import app_role_conninfo
 
 from lattice.contracts.atom import Atom, AtomStore
 from lattice.domain.stats import PatternStats, Tier
+from lattice.semantic.retrieve import context_result
 from lattice.stores.postgres_atoms import PostgresAtomStore
 
 
@@ -73,6 +74,19 @@ def test_postgres_atom_write_overwrites_head_and_records_versions(pg_database: s
             (first.employee_id, first.key),
         ).fetchall()
     assert versions == [(1, first.value), (2, second.value)]
+
+
+def test_postgres_atom_hits_include_exact_head_revision(pg_database: str) -> None:
+    with PostgresAtomStore.open(pg_database, company_id=uuid.uuid4()) as store:
+        first = _atom(value="first revision")
+        second = _atom(value="second revision")
+        store.write(first)
+        assert store.list_active_hits(first.employee_id)[0].revision == 1
+        store.write(second)
+        hit = store.list_active_hits(second.employee_id)[0]
+        assert hit.atom == second
+        assert (hit.employee_id, hit.key, hit.revision) == ("agent-1", "api.retry", 2)
+        assert context_result("retry", (hit,)).hits == (hit,)
 
 
 def test_postgres_atom_invalidation_removes_active_head_and_keeps_history(pg_database: str) -> None:

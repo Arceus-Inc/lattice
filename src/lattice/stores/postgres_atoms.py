@@ -11,7 +11,7 @@ from uuid import UUID
 import psycopg
 from psycopg.rows import tuple_row
 
-from lattice.contracts.atom import Atom
+from lattice.contracts.atom import Atom, ContextAtomHit
 from lattice.domain.stats import PatternStats, Tier
 
 
@@ -64,6 +64,25 @@ class PostgresAtomStore:
             (employee_id,),
         ).fetchall()
         return tuple(self._atom_from_row(row) for row in rows)
+
+    def list_active_hits(self, employee_id: str) -> tuple[ContextAtomHit, ...]:
+        rows = self._connection.execute(
+            "SELECT employee_id, key, value, created_at, invalid_at, activation, "
+            "alpha_own, beta_own, tier, version "
+            "FROM lattice_atom "
+            "WHERE employee_id = %s AND invalid_at IS NULL "
+            "ORDER BY created_at DESC, key",
+            (employee_id,),
+        ).fetchall()
+        return tuple(
+            ContextAtomHit(
+                employee_id=_as_text(row[0], "employee_id"),
+                key=_as_text(row[1], "key"),
+                revision=_as_positive_int(row[9], "version"),
+                atom=self._atom_from_row(row[:9]),
+            )
+            for row in rows
+        )
 
     def write(self, atom: Atom) -> None:
         with self._connection.transaction():
@@ -270,3 +289,10 @@ def _as_int(value: object, column: str) -> int:
     if isinstance(value, int) and not isinstance(value, bool):
         return value
     raise TypeError(f"{column} must be an integer")
+
+
+def _as_positive_int(value: object, column: str) -> int:
+    parsed = _as_int(value, column)
+    if parsed < 1:
+        raise TypeError(f"{column} must be positive")
+    return parsed
