@@ -32,4 +32,5 @@ def build_default(
         min_new_episodes=min_new_episodes,
         min_cluster_size=min_cluster_size,
         canonical_skills_root=canonical_skills_root,
+        evolved_skills_root=root,
     )

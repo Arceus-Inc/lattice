@@ -2,13 +2,29 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
+from datetime import datetime
 from pathlib import Path
 
 from lattice.consolidate.apply import apply_proposal
 from lattice.consolidate.cluster import build_hints, cluster, gate_open, new_episodes, rank
 from lattice.consolidate.validate import validate_proposal
+from lattice.contracts.applied import (
+    AppliedAtomEdge,
+    AppliedBeatOutcome,
+    AppliedEdgeStore,
+    LandedOutcomePhase,
+)
+from lattice.contracts.atom import Atom, AtomHitReader, AtomStore, ContextAtomHit
+from lattice.contracts.cursor import CursorStore
 from lattice.contracts.episodic import EpisodicReader
 from lattice.contracts.patch import PatchStore
+from lattice.contracts.selection import (
+    ContextAtomSelection,
+    ContextSelectionJournal,
+    ContextSelectionSnapshot,
+)
 from lattice.directive import (
     DEFAULT_MIN_CLUSTER_SIZE,
     DEFAULT_MIN_NEW_EPISODES,
@@ -17,12 +33,18 @@ from lattice.directive import (
 )
 from lattice.domain.packet import Packet
 from lattice.domain.proposal import Proposal
-from lattice.domain.result import AdjudicateResult, ApplyResult, ForgetResult, ValidationResult
+from lattice.domain.result import (
+    AdjudicateResult,
+    AppliedContextResult,
+    ApplyResult,
+    ContextResult,
+    ContextSelectionCaptureResult,
+    ForgetResult,
+    ValidationResult,
+)
 from lattice.semantic.adjudicate import adjudicate_atoms
 from lattice.semantic.forget import forget_employee
-from lattice.semantic.retrieve import render_context
-from lattice.stores.json_cursor import JsonCursorStore
-from lattice.stores.memory_md import MemoryMdStore
+from lattice.semantic.retrieve import context_result
 
 
 class Lattice:
@@ -32,13 +54,18 @@ class Lattice:
         self,
         *,
         episodes: EpisodicReader,
-        cursor: JsonCursorStore,
-        atoms: MemoryMdStore,
+        cursor: CursorStore,
+        atoms: AtomStore,
         patches: PatchStore | None = None,
         min_new_episodes: int = DEFAULT_MIN_NEW_EPISODES,
         min_cluster_size: int = DEFAULT_MIN_CLUSTER_SIZE,
         packet_limit: int = 20,
         canonical_skills_root: Path | None = None,
+        evolved_skills_root: Path | None = None,
+        apply_scope: Callable[[str], AbstractContextManager[None]] | None = None,
+        atom_hits: AtomHitReader | None = None,
+        applied_edges: AppliedEdgeStore | None = None,
+        context_selections: ContextSelectionJournal | None = None,
     ) -> None:
         self._episodes = episodes
         self._cursor = cursor
@@ -48,6 +75,11 @@ class Lattice:
         self._min_cluster = min_cluster_size
         self._packet_limit = packet_limit
         self._canonical_skills_root = canonical_skills_root
+        self._evolved_skills_root = evolved_skills_root
+        self._apply_scope = apply_scope or _legacy_apply_scope
+        self._atom_hits = atom_hits
+        self._applied_edges = applied_edges
+        self._context_selections = context_selections
 
     def gate_open(self, employee_id: str) -> bool:
         watermark = self._cursor.get(employee_id)
@@ -77,22 +109,28 @@ class Lattice:
             episodes=episodes,
             atoms=self._atoms,
             canonical_skills_root=self._canonical_skills_root,
+            evolved_skills_root=self._evolved_skills_root,
         )
 
     def apply(self, proposal: Proposal) -> ApplyResult:
-        validation = self.validate(proposal)
-        episodes = self._episodes.records_for(proposal.employee_id)
-        episodes_by_run_id = {episode.run_id: episode for episode in episodes}
-        result = apply_proposal(
-            proposal,
-            validation,
-            atoms=self._atoms,
-            episodes_by_run_id=episodes_by_run_id,
-            patches=self._patches,
-        )
-        if result.ok:
-            self._advance_cursor(proposal.employee_id)
-        return result
+        # ponytail: filesystem habit patches are outside this DB transaction; add a durable outbox
+        # when those writes need rollback semantics too.
+        with self._apply_scope(proposal.employee_id):
+            episodes = self._episodes.records_for(proposal.employee_id)
+            if not new_episodes(episodes, self._cursor.get(proposal.employee_id)):
+                return ApplyResult.failed("no fresh episodes", employee_id=proposal.employee_id)
+            validation = self.validate(proposal)
+            episodes_by_run_id = {episode.run_id: episode for episode in episodes}
+            result = apply_proposal(
+                proposal,
+                validation,
+                atoms=self._atoms,
+                episodes_by_run_id=episodes_by_run_id,
+                patches=self._patches,
+            )
+            if result.ok:
+                self._advance_cursor(proposal.employee_id)
+            return result
 
     def adjudicate(self, employee_id: str) -> AdjudicateResult:
         """Update pattern posteriors from episodic outcomes since last consolidation."""
@@ -136,8 +174,148 @@ class Lattice:
         return len(new_episodes(episodes, watermark)) > 0
 
     def context(self, employee_id: str, query: str, *, k: int = 5) -> str:
-        atoms = self._atoms.list_active(employee_id)
-        return render_context(query, atoms, k=k)
+        return self.context_result(employee_id, query, k=k).markdown
+
+    def context_result(self, employee_id: str, query: str, *, k: int = 5) -> ContextResult:
+        """Retrieve rendered context and exact selected atom identities."""
+        hits = (
+            self._atom_hits.list_active_hits(employee_id)
+            if self._atom_hits is not None
+            else _unversioned_hits(self._atoms.list_active(employee_id))
+        )
+        return context_result(query, hits, k=k)
+
+    def capture_context_selection(
+        self,
+        employee_id: str,
+        context: ContextResult,
+        *,
+        beat_run_id: str,
+    ) -> ContextSelectionCaptureResult:
+        """Durably append exact revisions when context is shown during a beat."""
+        if any(hit.employee_id != employee_id for hit in context.hits):
+            raise ValueError("context hits must belong to the selecting employee")
+        revisioned_hits = tuple(hit for hit in context.hits if hit.revision is not None)
+        skipped = tuple(hit for hit in context.hits if hit.revision is None)
+        if self._context_selections is None:
+            if revisioned_hits:
+                raise RuntimeError("revisioned context requires a durable ContextSelectionJournal")
+            return ContextSelectionCaptureResult(False, (), skipped)
+        selections = tuple(
+            _selection_for_hit(hit, beat_run_id=beat_run_id) for hit in revisioned_hits
+        )
+        outcome = self._context_selections.capture(
+            ContextSelectionSnapshot(
+                employee_id=employee_id,
+                beat_run_id=beat_run_id,
+                selections=selections,
+                complete=not skipped,
+            )
+        )
+        return ContextSelectionCaptureResult(
+            durable=outcome.complete,
+            selections=outcome.selections,
+            skipped_unversioned_hits=skipped,
+        )
+
+    def context_selection_for_run(
+        self,
+        employee_id: str,
+        beat_run_id: str,
+    ) -> tuple[ContextAtomSelection, ...]:
+        """Recover exact durable revisions shown earlier in a beat."""
+        if self._context_selections is None:
+            raise RuntimeError("legacy file composition has no durable context selection journal")
+        return self._context_selections.list_for_run(employee_id, beat_run_id)
+
+    def record_landed_selection(
+        self,
+        employee_id: str,
+        beat_run_id: str,
+        *,
+        outcome_phase: LandedOutcomePhase,
+        landed_at: datetime,
+    ) -> tuple[AppliedAtomEdge, ...]:
+        """Seal and record the durable selected set, including after process restart."""
+        if self._applied_edges is None:
+            raise RuntimeError("recording durable selection requires an AppliedEdgeStore")
+        edges = tuple(
+            AppliedAtomEdge(
+                employee_id=selection.employee_id,
+                key=selection.key,
+                revision=selection.revision,
+                beat_run_id=selection.beat_run_id,
+                outcome_phase=outcome_phase,
+                landed_at=landed_at,
+            )
+            for selection in self.context_selection_for_run(employee_id, beat_run_id)
+        )
+        return self._applied_edges.seal(
+            AppliedBeatOutcome(
+                employee_id=employee_id,
+                beat_run_id=beat_run_id,
+                outcome_phase=outcome_phase,
+                landed_at=landed_at,
+            ),
+            edges,
+        )
+
+    def record_landed_context(
+        self,
+        employee_id: str,
+        context: ContextResult,
+        *,
+        beat_run_id: str,
+        outcome_phase: LandedOutcomePhase,
+        landed_at: datetime,
+    ) -> AppliedContextResult:
+        """Capture and seal all exact hits selected for one landed beat.
+
+        Durable compositions commit the capture first, so a crash before sealing leaves
+        restart-safe lineage and an exact retry is idempotent.
+        """
+        if any(hit.employee_id != employee_id for hit in context.hits):
+            raise ValueError("context hits must belong to the landed employee")
+        revisioned_hits = tuple(hit for hit in context.hits if hit.revision is not None)
+        skipped_unversioned_hits = tuple(hit for hit in context.hits if hit.revision is None)
+        if self._context_selections is not None:
+            capture = self.capture_context_selection(
+                employee_id,
+                context,
+                beat_run_id=beat_run_id,
+            )
+            if not capture.durable:
+                if revisioned_hits:
+                    raise RuntimeError(
+                        "landed context cannot be sealed when selected hits lack revisions"
+                    )
+                return AppliedContextResult((), skipped_unversioned_hits)
+            return AppliedContextResult(
+                edges=self.record_landed_selection(
+                    employee_id,
+                    beat_run_id,
+                    outcome_phase=outcome_phase,
+                    landed_at=landed_at,
+                ),
+                skipped_unversioned_hits=(),
+            )
+        if not revisioned_hits:
+            return AppliedContextResult((), skipped_unversioned_hits)
+        if self._applied_edges is None:
+            raise RuntimeError("recording revisioned context requires an AppliedEdgeStore")
+        edges = tuple(
+            _landed_edge(
+                hit,
+                beat_run_id=beat_run_id,
+                outcome_phase=outcome_phase,
+                landed_at=landed_at,
+            )
+            for hit in revisioned_hits
+        )
+        return AppliedContextResult(
+            edges=self._applied_edges.record_all(edges),
+            skipped_unversioned_hits=skipped_unversioned_hits,
+        )
 
     def beat_end_teaser(self, employee_id: str) -> str:
         """Short beat-end notice — empty when gate closed (no consolidation nudge)."""
@@ -157,3 +335,53 @@ class Lattice:
             last_run_id=latest.run_id,
             episodes_seen=len(episodes),
         )
+
+
+def _legacy_apply_scope(_: str) -> AbstractContextManager[None]:
+    return nullcontext()
+
+
+def _unversioned_hits(atoms: tuple[Atom, ...]) -> tuple[ContextAtomHit, ...]:
+    return tuple(
+        ContextAtomHit(
+            employee_id=atom.employee_id,
+            key=atom.key,
+            revision=None,
+            atom=atom,
+        )
+        for atom in atoms
+    )
+
+
+def _landed_edge(
+    hit: ContextAtomHit,
+    *,
+    beat_run_id: str,
+    outcome_phase: LandedOutcomePhase,
+    landed_at: datetime,
+) -> AppliedAtomEdge:
+    if hit.revision is None:
+        raise ValueError("an APPLIED edge requires an exact atom revision")
+    return AppliedAtomEdge(
+        employee_id=hit.employee_id,
+        key=hit.key,
+        revision=hit.revision,
+        beat_run_id=beat_run_id,
+        outcome_phase=outcome_phase,
+        landed_at=landed_at,
+    )
+
+
+def _selection_for_hit(
+    hit: ContextAtomHit,
+    *,
+    beat_run_id: str,
+) -> ContextAtomSelection:
+    if hit.revision is None:
+        raise ValueError("a durable context selection requires an exact atom revision")
+    return ContextAtomSelection(
+        employee_id=hit.employee_id,
+        beat_run_id=beat_run_id,
+        key=hit.key,
+        revision=hit.revision,
+    )

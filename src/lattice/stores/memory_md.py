@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, contextmanager
 from datetime import datetime
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any, cast
 
-from lattice.contracts.atom import Atom
+from lattice.contracts.atom import Atom, AtomStore
 from lattice.domain.stats import PatternStats, Tier
 from lattice.stores._safe_path import assert_safe_store_id
 
@@ -81,15 +83,85 @@ class MemoryMdStore:
         return self._employee_dir(employee_id) / "semantic" / f"{safe}.json"
 
     def _rewrite_memory_md(self, employee_id: str) -> None:
-        blocks = ["# MEMORY", ""]
-        active = self.list_active(employee_id)
-        for index, atom in enumerate(active):
-            if index > 0:
-                blocks.append("")
-            blocks.append(_format_memory_block(atom))
         memory_md = self._employee_dir(employee_id) / "MEMORY.md"
         memory_md.parent.mkdir(parents=True, exist_ok=True)
-        memory_md.write_text("\n".join(blocks) + "\n", encoding="utf-8")
+        memory_md.write_text(render_memory_md(self.list_active(employee_id)), encoding="utf-8")
+
+
+class MemoryMdView:
+    """Derived ``MEMORY.md`` renderer over an authoritative atom store."""
+
+    def __init__(
+        self,
+        atoms: AtomStore,
+        root: str | Path,
+        *,
+        transaction_scope: Callable[[str], AbstractContextManager[None]] | None = None,
+    ) -> None:
+        self._atoms = atoms
+        self._root = Path(root)
+        self._transaction_scope = transaction_scope
+        self._deferred_employee_id: str | None = None
+
+    def list_active(self, employee_id: str) -> tuple[Atom, ...]:
+        return self._atoms.list_active(employee_id)
+
+    def write(self, atom: Atom) -> None:
+        self._atoms.write(atom)
+        self._rewrite_if_immediate(atom.employee_id)
+
+    def invalidate(self, employee_id: str, key: str, *, at: datetime) -> None:
+        self._atoms.invalidate(employee_id, key, at=at)
+        self._rewrite_if_immediate(employee_id)
+
+    @contextmanager
+    def apply_scope(self, employee_id: str) -> Iterator[None]:
+        """Defer this employee's view until the supplied database scope commits."""
+        if self._transaction_scope is None:
+            yield
+            return
+        try:
+            with self._transaction_scope(employee_id):
+                self._deferred_employee_id = employee_id
+                yield
+        finally:
+            self._deferred_employee_id = None
+        self.rewrite(employee_id)
+
+    def rewrite(self, employee_id: str) -> None:
+        employee_dir = self._root / assert_safe_store_id(employee_id)
+        employee_dir.mkdir(parents=True, exist_ok=True)
+        _atomic_write(employee_dir / "MEMORY.md", render_memory_md(self._atoms.list_active(employee_id)))
+
+    def _rewrite_if_immediate(self, employee_id: str) -> None:
+        if self._deferred_employee_id != employee_id:
+            self.rewrite(employee_id)
+
+
+def render_memory_md(active: tuple[Atom, ...]) -> str:
+    """Render the exact ``MEMORY.md`` format shared by file and Postgres compositions."""
+    blocks = ["# MEMORY", ""]
+    for index, atom in enumerate(active):
+        if index > 0:
+            blocks.append("")
+        blocks.append(_format_memory_block(atom))
+    return "\n".join(blocks) + "\n"
+
+
+def _atomic_write(path: Path, content: str) -> None:
+    with NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        delete=False,
+    ) as temporary:
+        temporary.write(content)
+        temporary_path = Path(temporary.name)
+    try:
+        temporary_path.replace(path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
 
 
 def _format_memory_block(atom: Atom) -> str:

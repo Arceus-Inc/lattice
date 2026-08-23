@@ -6,10 +6,24 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from lattice.consolidate.apply import apply_proposal
-from lattice.contracts.atom import Atom
+from lattice.contracts.atom import Atom, AtomStore
 from lattice.domain.proposal import PatternDraft, Proposal
 from lattice.domain.result import ValidationResult
 from lattice.stores.memory_md import MemoryMdStore
+
+
+class _RecordingAtomStore:
+    def __init__(self) -> None:
+        self.written: list[Atom] = []
+
+    def list_active(self, employee_id: str) -> tuple[Atom, ...]:
+        return ()
+
+    def write(self, atom: Atom) -> None:
+        self.written.append(atom)
+
+    def invalidate(self, employee_id: str, key: str, *, at: datetime) -> None:
+        return None
 
 
 def test_apply_failed_validation_does_not_write(tmp_path: Path) -> None:
@@ -56,6 +70,26 @@ def test_apply_assert_writes_atom(tmp_path: Path) -> None:
     assert len(active) == 1
     assert active[0].key == "api.retry"
     assert active[0].key_files == ("src/api/client.py",)
+
+
+def test_apply_accepts_atom_store_port() -> None:
+    recording = _RecordingAtomStore()
+    atoms: AtomStore = recording
+    proposal = Proposal(
+        employee_id="e1",
+        patterns=(
+            PatternDraft(
+                key="api.retry",
+                claim="HTTP retries use exponential backoff capped at 30s",
+                source_run_ids=("r1",),
+            ),
+        ),
+    )
+
+    result = apply_proposal(proposal, ValidationResult(ok=True), atoms=atoms)
+
+    assert result.ok is True
+    assert recording.written[0].key == "api.retry"
 
 
 def test_apply_supersede_invalidates_old(tmp_path: Path) -> None:

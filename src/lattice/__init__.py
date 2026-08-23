@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from lattice.domain import (
+    AppliedContextResult,
     ApplyResult,
+    ContextSelectionCaptureResult,
     HabitAction,
     HabitDraft,
     HintKind,
@@ -32,8 +34,10 @@ from lattice.reflection import (
 )
 
 __all__ = [
+    "AppliedContextResult",
     "ApplicationAuthorization",
     "ApplyResult",
+    "ContextSelectionCaptureResult",
     "FailureCategory",
     "HabitAction",
     "HabitDraft",
