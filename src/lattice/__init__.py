@@ -14,10 +14,29 @@ from lattice.domain import (
     ValidationResult,
 )
 from lattice.facade import Lattice
+from lattice.reflection import (
+    ApplicationAuthorization,
+    FailureCategory,
+    ReflectionCluster,
+    ReflectionDiff,
+    ReflectionProposal,
+    ReflectionReview,
+    ReflectionRunRef,
+    ReflectionTargetKind,
+    ReplayOutcome,
+    ReplayResult,
+    ReplaySeverity,
+    RepresentativeSuccessEvidence,
+    ReviewDecision,
+    TrajectoryEvidence,
+    cluster_reflection_evidence,
+)
 
 __all__ = [
     "AppliedContextResult",
+    "ApplicationAuthorization",
     "ApplyResult",
+    "FailureCategory",
     "HabitAction",
     "HabitDraft",
     "HintKind",
@@ -25,5 +44,18 @@ __all__ = [
     "Packet",
     "PatternDraft",
     "Proposal",
+    "ReflectionCluster",
+    "ReflectionDiff",
+    "ReflectionProposal",
+    "ReflectionReview",
+    "ReflectionRunRef",
+    "ReflectionTargetKind",
+    "ReplayOutcome",
+    "ReplayResult",
+    "ReplaySeverity",
+    "RepresentativeSuccessEvidence",
+    "ReviewDecision",
+    "TrajectoryEvidence",
     "ValidationResult",
+    "cluster_reflection_evidence",
 ]
